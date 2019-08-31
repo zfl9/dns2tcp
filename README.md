@@ -2,7 +2,7 @@
 一个 DNS 实用工具，用于将 DNS 查询从 UDP 模式转换为 TCP 模式。当然 pdnsd、dnsforwarder 也支持该功能，但是它们通常都有着较为繁杂的配置，而很多时候我们只是需要使用它们的 udp2tcp 功能而已，因此有了 `dns2tcp`。`dns2tcp` 设计的非常简洁以及易用，它不需要任何配置文件，直接在命令行参数中指定一个 **本地 UDP 监听地址** 以及一个 **远程 DNS 服务器地址**（该 DNS 服务器支持 TCP 查询）即可，没有任何多余的功能。
 
 ## 如何编译
-`dns2tcp` 使用 [libuv](https://github.com/libuv/libuv) 作为网络库，因此请先安装 libuv 依赖库，比如使用 `yum` 等包管理器来安装，然后编译 dns2tcp：
+`dns2tcp` 使用 [libuv](https://github.com/libuv/libuv) 作为网络库，因此请先安装 libuv 依赖库，比如使用 `yum` 等包管理器来安装，然后开始编译：
 ```bash
 git clone https://github.com/zfl9/dns2tcp
 cd dns2tcp
