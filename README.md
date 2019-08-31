@@ -35,4 +35,12 @@ cd dns2tcp
 make CFLAGS="-pthread" INCLUDES="-I/opt/libuv/include" LDFLAGS="-L/opt/libuv/lib" && sudo make install
 ```
 
+## 如何运行
+```bash
+dns2tcp -L"127.0.0.1#5353" -R"8.8.8.8#53"
+```
+- `-L` 选项指定本地监听地址，该监听地址接受 UDP 形式的 DNS 查询。
+- `-R` 选项指定远程 DNS 服务器地址，该 DNS 服务器应支持 TCP 查询。
+- 在该例子中，dns2tcp 会将从 `127.0.0.1#5353` 地址收到 dns query 转换为 tcp 形式的 dns query，然后与 `8.8.8.8#53` 服务器建立 TCP 连接，连接建立后，会将此 dns query 发送给 `8.8.8.8#53`，然后等待 `8.8.8.8#53` 的 dns reply，收到完整 packet 后，将其转换为 udp 形式的 dns reply，最后将其发送给与之关联的请求客户端，然后释放 TCP 连接以及相关数据。
+
 // TODO
