@@ -15,6 +15,7 @@
 
 static bool       g_verbose                 = false;
 static uv_loop_t *g_evloop                  = NULL;
+static uv_udp_t  *g_udp_server              = NULL;
 static char       g_listen_ipstr[IP6STRLEN] = {0};
 static portno_t   g_listen_portno           = 0;
 static skaddr6_t  g_listen_skaddr           = {0};
@@ -24,6 +25,12 @@ static skaddr6_t  g_remote_skaddr           = {0};
 
 static void udp_alloc_cb(uv_handle_t *udp_server, size_t sugsize, uv_buf_t *uvbuf);
 static void udp_recv_cb(uv_udp_t *udp_server, ssize_t nread, const uv_buf_t *uvbuf, const skaddr_t *skaddr, unsigned flags);
+
+static void tcp_connect_cb(uv_connect_t *connreq, int status);
+static void tcp_write_cb(uv_write_t *writereq, int status);
+static void tcp_alloc_cb(uv_handle_t *tcp_client, size_t sugsize, uv_buf_t *uvbuf);
+static void tcp_read_cb(uv_stream_t *tcp_client, ssize_t nread, const uv_buf_t *uvbuf);
+static void tcp_close_cb(uv_handle_t *tcp_client);
 
 static void print_command_help(void) {
     printf("usage: dns2tcp <-L LISTEN_ADDR> <-R REMOTE_ADDR> [-vVh]\n"
@@ -154,16 +161,15 @@ int main(int argc, char *argv[]) {
     IF_VERBOSE LOGINF("[main] verbose mode, affect performance");
 
     g_evloop = uv_default_loop();
+    g_udp_server = &(uv_udp_t){0};
+    uv_udp_init(g_evloop, g_udp_server);
 
-    uv_udp_t *udp_server = &(uv_udp_t){0};
-    uv_udp_init(g_evloop, udp_server);
-
-    int retval = uv_udp_bind(udp_server, (void *)&g_listen_skaddr, 0);
+    int retval = uv_udp_bind(g_udp_server, (void *)&g_listen_skaddr, 0);
     if (retval < 0) {
         LOGERR("[main] udp bind failed: (%d) %s", -retval, uv_strerror(retval));
         return -retval;
     }
-    uv_udp_recv_start(udp_server, udp_alloc_cb, udp_recv_cb);
+    uv_udp_recv_start(g_udp_server, udp_alloc_cb, udp_recv_cb);
 
     uv_run(g_evloop, UV_RUN_DEFAULT);
     return 0;
@@ -197,10 +203,45 @@ static void udp_recv_cb(uv_udp_t *udp_server __attribute__((unused)), ssize_t nr
         LOGINF("[udp_recv_cb] recv %zd bytes data from %s#%hu", nread, ipstr, portno);
     }
 
-    // TODO
+    uv_tcp_t *tcp_client = malloc(sizeof(uv_tcp_t));
+    uv_tcp_init(g_evloop, tcp_client);
+    uv_tcp_nodelay(tcp_client, 1);
 
+    uint16_t *msglen_ptr = (void *)uvbuf->base - 2;
+    *msglen_ptr = htons(nread);
+    tcp_client->data = uvbuf->base - 2;
+
+    uv_connect_t *connreq = malloc(sizeof(uv_connect_t));
+    int retval = uv_tcp_connect(connreq, tcp_client, (void *)&g_remote_skaddr, tcp_connect_cb);
+    if (retval < 0) {
+        LOGERR("[udp_recv_cb] tcp connect failed: (%d) %s", -retval, uv_strerror(retval));
+        uv_close((void *)tcp_client, tcp_close_cb);
+        free(connreq);
+        return;
+    }
+    IF_VERBOSE LOGINF("[udp_recv_cb] try to connect to %s#%hu", g_remote_ipstr, g_remote_portno);
     return;
 
 FREE_UVBUF:
     free(uvbuf->base - 2);
+}
+
+static void tcp_connect_cb(uv_connect_t *connreq, int status) {
+    // TODO
+}
+
+static void tcp_write_cb(uv_write_t *writereq, int status) {
+    // TODO
+}
+
+static void tcp_alloc_cb(uv_handle_t *tcp_client, size_t sugsize, uv_buf_t *uvbuf) {
+    // TODO
+}
+
+static void tcp_read_cb(uv_stream_t *tcp_client, ssize_t nread, const uv_buf_t *uvbuf) {
+    // TODO
+}
+
+static void tcp_close_cb(uv_handle_t *tcp_client) {
+    // TODO
 }
