@@ -10,6 +10,7 @@
 #include <signal.h>
 #undef _GNU_SOURCE
 
+#define IF_VERBOSE if (g_verbose)
 #define DNS2TCP_VERSION "dns2tcp v1.0"
 
 static bool       g_verbose                 = false;
@@ -24,7 +25,7 @@ static skaddr6_t  g_remote_skaddr           = {0};
 static void print_command_help(void) {
     printf("usage: dns2tcp <-L LISTEN_ADDR> <-R REMOTE_ADDR> [-vVh]\n"
            " -L <ip#port>           udp listen address, it is required\n"
-           " -R <ip#port>           tcp server address, it is required\n"
+           " -R <ip#port>           tcp remote address, it is required\n"
            " -v                     print verbose log, default: <disabled>\n"
            " -V                     print version number of dns2tcp and exit\n"
            " -h                     print help information of dns2tcp and exit\n"
@@ -144,6 +145,10 @@ int main(int argc, char *argv[]) {
     signal(SIGPIPE, SIG_IGN);
     setvbuf(stdout, NULL, _IOLBF, 256);
     parse_command_args(argc, argv);
+
+    LOGINF("[main] udp listen addr: %s#%hu", g_listen_ipstr, g_listen_portno);
+    LOGINF("[main] tcp remote addr: %s#%hu", g_remote_ipstr, g_remote_portno);
+    IF_VERBOSE LOGINF("[main] verbose mode, affect performance");
 
     // TODO
 
