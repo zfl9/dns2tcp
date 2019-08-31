@@ -16,6 +16,7 @@
 typedef struct {
     void *buffer;
     uint16_t nread;
+    skaddr6_t srcaddr;
 } tcp_data_t;
 
 static bool       g_verbose                 = false;
@@ -198,9 +199,10 @@ static void udp_recv_cb(uv_udp_t *udp_server __attribute__((unused)), ssize_t nr
         goto FREE_UVBUF;
     }
 
+    bool is_ipv4 = skaddr->sa_family == AF_INET;
     IF_VERBOSE {
         char ipstr[IP6STRLEN]; portno_t portno;
-        if (skaddr->sa_family == AF_INET) {
+        if (is_ipv4) {
             parse_ipv4_addr((void *)skaddr, ipstr, &portno);
         } else {
             parse_ipv6_addr((void *)skaddr, ipstr, &portno);
@@ -215,9 +217,9 @@ static void udp_recv_cb(uv_udp_t *udp_server __attribute__((unused)), ssize_t nr
     uv_tcp_init(g_evloop, tcp_client);
     uv_tcp_nodelay(tcp_client, 1);
 
-    tcp_data_t *tcp_data = malloc(sizeof(tcp_data_t));
+    tcp_data_t *tcp_data = calloc(1, sizeof(tcp_data_t));
     tcp_data->buffer = uvbuf->base - 2;
-    tcp_data->nread = 0;
+    memcpy(&tcp_data->srcaddr, skaddr, is_ipv4 ? sizeof(skaddr4_t) : sizeof(skaddr6_t));
     tcp_client->data = tcp_data;
 
     uv_connect_t *connreq = malloc(sizeof(uv_connect_t));
@@ -285,10 +287,71 @@ static void tcp_alloc_cb(uv_handle_t *tcp_client, size_t sugsize __attribute__((
     uvbuf->len = DNS_PACKET_MAXSIZE + 2 - tcp_data->nread;
 }
 
-static void tcp_read_cb(uv_stream_t *tcp_client, ssize_t nread, const uv_buf_t *uvbuf) {
-    // TODO
+static void tcp_read_cb(uv_stream_t *tcp_client, ssize_t nread, const uv_buf_t *uvbuf __attribute__((unused))) {
+    tcp_data_t *tcp_data = tcp_client->data;
+
+    if (nread == 0) return;
+    if (nread < 0) {
+        if (nread != UV_EOF) LOGERR("[tcp_read_cb] read failed: (%zd) %s", -nread, uv_strerror(nread));
+        goto CLOSE_TCPCLIENT;
+    }
+    if (tcp_data->nread == 0 && nread < 2) {
+        LOGERR("[tcp_read_cb] message length is too small, discard it");
+        goto CLOSE_TCPCLIENT;
+    }
+    tcp_data->nread += nread;
+
+    uint16_t msglen = ntohs(*(uint16_t *)tcp_data->buffer);
+    if (tcp_data->nread - nread == 0) {
+        if (msglen > DNS_PACKET_MAXSIZE) {
+            LOGERR("[tcp_read_cb] message length is too large, discard it");
+            goto CLOSE_TCPCLIENT;
+        }
+        if (tcp_data->nread > msglen + 2) {
+            LOGERR("[tcp_read_cb] message length is incorrect, discard it");
+            goto CLOSE_TCPCLIENT;
+        }
+    }
+    if (tcp_data->nread < msglen + 2) return; /* received partial data */
+
+    uv_buf_t uvbufs[] = {{
+        .base = tcp_data->buffer + 2,
+        .len = msglen,
+    }};
+
+    IF_VERBOSE {
+        LOGINF("[tcp_read_cb] recv %huB data from %s#%hu", msglen, g_remote_ipstr, g_remote_portno);
+        char ipstr[IP6STRLEN]; portno_t portno;
+        if (tcp_data->srcaddr.sin6_family == AF_INET) {
+            parse_ipv4_addr((void *)&tcp_data->srcaddr, ipstr, &portno);
+        } else {
+            parse_ipv6_addr((void *)&tcp_data->srcaddr, ipstr, &portno);
+        }
+        LOGINF("[tcp_read_cb] send %huB data to %s#%hu", msglen, ipstr, portno);
+    }
+
+    nread = uv_udp_try_send(g_udp_server, uvbufs, 1, (void *)&tcp_data->srcaddr);
+    if (nread < 0) {
+        LOGERR("[tcp_read_cb] send failed: (%zd) %s", -nread, uv_strerror(nread));
+    } else {
+        IF_VERBOSE {
+            char ipstr[IP6STRLEN]; portno_t portno;
+            if (tcp_data->srcaddr.sin6_family == AF_INET) {
+                parse_ipv4_addr((void *)&tcp_data->srcaddr, ipstr, &portno);
+            } else {
+                parse_ipv6_addr((void *)&tcp_data->srcaddr, ipstr, &portno);
+            }
+            LOGINF("[tcp_read_cb] data has been written to %s#%hu", ipstr, portno);
+        }
+    }
+
+CLOSE_TCPCLIENT:
+    uv_close((void *)tcp_client, tcp_close_cb);
 }
 
 static void tcp_close_cb(uv_handle_t *tcp_client) {
-    // TODO
+    tcp_data_t *tcp_data = tcp_client->data;
+    free(tcp_data->buffer);
+    free(tcp_data);
+    free(tcp_client);
 }
