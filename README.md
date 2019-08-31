@@ -12,6 +12,7 @@ dns2tcp 默认安装到 `/usr/local/bin/dns2tcp`，可安装到其它目录，�
 
 如果你希望将 libuv 依赖库静态链接到 `dns2tcp` 可执行文件中，可按照如下步骤进行编译：
 ```bash
+# 进入某个目录
 cd /opt
 
 # 获取 libuv 源码包
