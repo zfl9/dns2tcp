@@ -13,6 +13,11 @@
 #define IF_VERBOSE if (g_verbose)
 #define DNS2TCP_VERSION "dns2tcp v1.0"
 
+typedef struct {
+    void *buffer;
+    uint16_t nread;
+} tcp_data_t;
+
 static bool       g_verbose                 = false;
 static uv_loop_t *g_evloop                  = NULL;
 static uv_udp_t  *g_udp_server              = NULL;
@@ -203,13 +208,17 @@ static void udp_recv_cb(uv_udp_t *udp_server __attribute__((unused)), ssize_t nr
         LOGINF("[udp_recv_cb] recv %zdB data from %s#%hu", nread, ipstr, portno);
     }
 
+    uint16_t *msglen_ptr = (void *)uvbuf->base - 2;
+    *msglen_ptr = htons(nread);
+
     uv_tcp_t *tcp_client = malloc(sizeof(uv_tcp_t));
     uv_tcp_init(g_evloop, tcp_client);
     uv_tcp_nodelay(tcp_client, 1);
 
-    uint16_t *msglen_ptr = (void *)uvbuf->base - 2;
-    *msglen_ptr = htons(nread);
-    tcp_client->data = uvbuf->base - 2;
+    tcp_data_t *tcp_data = malloc(sizeof(tcp_data_t));
+    tcp_data->buffer = uvbuf->base - 2;
+    tcp_data->nread = 0;
+    tcp_client->data = tcp_data;
 
     uv_connect_t *connreq = malloc(sizeof(uv_connect_t));
     int retval = uv_tcp_connect(connreq, tcp_client, (void *)&g_remote_skaddr, tcp_connect_cb);
@@ -228,6 +237,7 @@ FREE_UVBUF:
 
 static void tcp_connect_cb(uv_connect_t *connreq, int status) {
     uv_stream_t *tcp_client = connreq->handle;
+    tcp_data_t *tcp_data = tcp_client->data;
     free(connreq);
 
     if (status < 0) {
@@ -236,15 +246,19 @@ static void tcp_connect_cb(uv_connect_t *connreq, int status) {
     }
     IF_VERBOSE LOGINF("[tcp_connect_cb] connected to %s#%hu", g_remote_ipstr, g_remote_portno);
 
+    uint16_t msglen = ntohs(*(uint16_t *)tcp_data->buffer);
+    uv_buf_t uvbufs[] = {{
+        .base = tcp_data->buffer,
+        .len = msglen + 2,
+    }};
     uv_write_t *writereq = malloc(sizeof(uv_write_t));
-    uv_buf_t uvbufs[] = {{.base = tcp_client->data, .len = ntohs(*(uint16_t *)tcp_client->data) + 2}};
     status = uv_write(writereq, tcp_client, uvbufs, 1, tcp_write_cb);
     if (status < 0) {
         LOGERR("[tcp_connect_cb] write failed: (%d) %s", -status, uv_strerror(status));
         free(writereq);
         goto CLOSE_TCPCLIENT;
     }
-    IF_VERBOSE LOGINF("[tcp_connect_cb] writing %huB data to %s#%hu", ntohs(*(uint16_t *)tcp_client->data), g_remote_ipstr, g_remote_portno);
+    IF_VERBOSE LOGINF("[tcp_connect_cb] writing %huB data to %s#%hu", msglen, g_remote_ipstr, g_remote_portno);
     return;
 
 CLOSE_TCPCLIENT:
@@ -265,8 +279,10 @@ static void tcp_write_cb(uv_write_t *writereq, int status) {
     uv_read_start(tcp_client, tcp_alloc_cb, tcp_read_cb);
 }
 
-static void tcp_alloc_cb(uv_handle_t *tcp_client, size_t sugsize, uv_buf_t *uvbuf) {
-    // TODO
+static void tcp_alloc_cb(uv_handle_t *tcp_client, size_t sugsize __attribute__((unused)), uv_buf_t *uvbuf) {
+    tcp_data_t *tcp_data = tcp_client->data;
+    uvbuf->base = tcp_data->buffer + tcp_data->nread;
+    uvbuf->len = DNS_PACKET_MAXSIZE + 2 - tcp_data->nread;
 }
 
 static void tcp_read_cb(uv_stream_t *tcp_client, ssize_t nread, const uv_buf_t *uvbuf) {
