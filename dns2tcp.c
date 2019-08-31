@@ -166,7 +166,7 @@ int main(int argc, char *argv[]) {
 
     int retval = uv_udp_bind(g_udp_server, (void *)&g_listen_skaddr, 0);
     if (retval < 0) {
-        LOGERR("[main] udp bind failed: (%d) %s", -retval, uv_strerror(retval));
+        LOGERR("[main] bind failed: (%d) %s", -retval, uv_strerror(retval));
         return -retval;
     }
     uv_udp_recv_start(g_udp_server, udp_alloc_cb, udp_recv_cb);
@@ -184,12 +184,12 @@ static void udp_recv_cb(uv_udp_t *udp_server __attribute__((unused)), ssize_t nr
     if (nread == 0) goto FREE_UVBUF;
 
     if (nread < 0) {
-        LOGERR("[udp_recv_cb] udp recv failed: (%zd) %s", -nread, uv_strerror(nread));
+        LOGERR("[udp_recv_cb] recv failed: (%zd) %s", -nread, uv_strerror(nread));
         goto FREE_UVBUF;
     }
 
     if (flags & UV_UDP_PARTIAL) {
-        LOGERR("[udp_recv_cb] received a corrupted(partial) udp packet");
+        LOGERR("[udp_recv_cb] received a partial packet, discard it");
         goto FREE_UVBUF;
     }
 
@@ -200,7 +200,7 @@ static void udp_recv_cb(uv_udp_t *udp_server __attribute__((unused)), ssize_t nr
         } else {
             parse_ipv6_addr((void *)skaddr, ipstr, &portno);
         }
-        LOGINF("[udp_recv_cb] recv %zd bytes data from %s#%hu", nread, ipstr, portno);
+        LOGINF("[udp_recv_cb] recv %zdB data from %s#%hu", nread, ipstr, portno);
     }
 
     uv_tcp_t *tcp_client = malloc(sizeof(uv_tcp_t));
@@ -214,12 +214,12 @@ static void udp_recv_cb(uv_udp_t *udp_server __attribute__((unused)), ssize_t nr
     uv_connect_t *connreq = malloc(sizeof(uv_connect_t));
     int retval = uv_tcp_connect(connreq, tcp_client, (void *)&g_remote_skaddr, tcp_connect_cb);
     if (retval < 0) {
-        LOGERR("[udp_recv_cb] tcp connect failed: (%d) %s", -retval, uv_strerror(retval));
+        LOGERR("[udp_recv_cb] connect failed: (%d) %s", -retval, uv_strerror(retval));
         uv_close((void *)tcp_client, tcp_close_cb);
         free(connreq);
         return;
     }
-    IF_VERBOSE LOGINF("[udp_recv_cb] try to connect to %s#%hu", g_remote_ipstr, g_remote_portno);
+    IF_VERBOSE LOGINF("[udp_recv_cb] connecting to %s#%hu", g_remote_ipstr, g_remote_portno);
     return;
 
 FREE_UVBUF:
@@ -227,11 +227,42 @@ FREE_UVBUF:
 }
 
 static void tcp_connect_cb(uv_connect_t *connreq, int status) {
-    // TODO
+    uv_stream_t *tcp_client = connreq->handle;
+    free(connreq);
+
+    if (status < 0) {
+        LOGERR("[tcp_connect_cb] connect failed: (%d) %s", -status, uv_strerror(status));
+        goto CLOSE_TCPCLIENT;
+    }
+    IF_VERBOSE LOGINF("[tcp_connect_cb] connected to %s#%hu", g_remote_ipstr, g_remote_portno);
+
+    uv_write_t *writereq = malloc(sizeof(uv_write_t));
+    uv_buf_t uvbufs[] = {{.base = tcp_client->data, .len = ntohs(*(uint16_t *)tcp_client->data) + 2}};
+    status = uv_write(writereq, tcp_client, uvbufs, 1, tcp_write_cb);
+    if (status < 0) {
+        LOGERR("[tcp_connect_cb] write failed: (%d) %s", -status, uv_strerror(status));
+        free(writereq);
+        goto CLOSE_TCPCLIENT;
+    }
+    IF_VERBOSE LOGINF("[tcp_connect_cb] writing %huB data to %s#%hu", ntohs(*(uint16_t *)tcp_client->data), g_remote_ipstr, g_remote_portno);
+    return;
+
+CLOSE_TCPCLIENT:
+    uv_close((void *)tcp_client, tcp_close_cb);
 }
 
 static void tcp_write_cb(uv_write_t *writereq, int status) {
-    // TODO
+    uv_stream_t *tcp_client = writereq->handle;
+    free(writereq);
+
+    if (status < 0) {
+        LOGERR("[tcp_write_cb] write failed: (%d) %s", -status, uv_strerror(status));
+        uv_close((void *)tcp_client, tcp_close_cb);
+        return;
+    }
+    IF_VERBOSE LOGINF("[tcp_write_cb] data has been written to %s#%hu", g_remote_ipstr, g_remote_portno);
+
+    uv_read_start(tcp_client, tcp_alloc_cb, tcp_read_cb);
 }
 
 static void tcp_alloc_cb(uv_handle_t *tcp_client, size_t sugsize, uv_buf_t *uvbuf) {
