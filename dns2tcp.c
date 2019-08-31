@@ -1,6 +1,13 @@
 #define _GNU_SOURCE
 #include "logutils.h"
+#include "netutils.h"
 #include <uv.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <string.h>
+#include <unistd.h>
+#include <signal.h>
 #undef _GNU_SOURCE
 
 static bool g_verbose = false;
