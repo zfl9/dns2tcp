@@ -6,6 +6,9 @@
 #include <netinet/in.h>
 #undef _GNU_SOURCE
 
+/* mtu(1500) - iphdr(20) - udphdr(8) */
+#define DNS_PACKET_MAXSIZE 1472 /* bytes */
+
 /* ipaddr string len */
 #define IP4STRLEN INET_ADDRSTRLEN
 #define IP6STRLEN INET6_ADDRSTRLEN
@@ -17,6 +20,7 @@
 typedef uint16_t portno_t;
 
 /* sockaddr type alias */
+typedef struct sockaddr     skaddr_t;
 typedef struct sockaddr_in  skaddr4_t;
 typedef struct sockaddr_in6 skaddr6_t;
 

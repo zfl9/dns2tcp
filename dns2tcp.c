@@ -22,6 +22,9 @@ static char       g_remote_ipstr[IP6STRLEN] = {0};
 static portno_t   g_remote_portno           = 0;
 static skaddr6_t  g_remote_skaddr           = {0};
 
+static void udp_alloc_cb(uv_handle_t *udp_server, size_t sugsize, uv_buf_t *uvbuf);
+static void udp_recv_cb(uv_udp_t *udp_server, ssize_t nread, const uv_buf_t *uvbuf, const skaddr_t *skaddr, unsigned flags);
+
 static void print_command_help(void) {
     printf("usage: dns2tcp <-L LISTEN_ADDR> <-R REMOTE_ADDR> [-vVh]\n"
            " -L <ip#port>           udp listen address, it is required\n"
@@ -160,9 +163,44 @@ int main(int argc, char *argv[]) {
         LOGERR("[main] udp bind failed: (%d) %s", -retval, uv_strerror(retval));
         return -retval;
     }
-
-    // TODO
+    uv_udp_recv_start(udp_server, udp_alloc_cb, udp_recv_cb);
 
     uv_run(g_evloop, UV_RUN_DEFAULT);
     return 0;
+}
+
+static void udp_alloc_cb(uv_handle_t *udp_server __attribute__((unused)), size_t sugsize __attribute__((unused)), uv_buf_t *uvbuf) {
+    uvbuf->base = malloc(DNS_PACKET_MAXSIZE + 2) + 2;
+    uvbuf->len = DNS_PACKET_MAXSIZE;
+}
+
+static void udp_recv_cb(uv_udp_t *udp_server __attribute__((unused)), ssize_t nread, const uv_buf_t *uvbuf, const skaddr_t *skaddr, unsigned flags) {
+    if (nread == 0) goto FREE_UVBUF;
+
+    if (nread < 0) {
+        LOGERR("[udp_recv_cb] udp recv failed: (%zd) %s", -nread, uv_strerror(nread));
+        goto FREE_UVBUF;
+    }
+
+    if (flags & UV_UDP_PARTIAL) {
+        LOGERR("[udp_recv_cb] received a corrupted(partial) udp packet");
+        goto FREE_UVBUF;
+    }
+
+    IF_VERBOSE {
+        char ipstr[IP6STRLEN]; portno_t portno;
+        if (skaddr->sa_family == AF_INET) {
+            parse_ipv4_addr((void *)skaddr, ipstr, &portno);
+        } else {
+            parse_ipv6_addr((void *)skaddr, ipstr, &portno);
+        }
+        LOGINF("[udp_recv_cb] recv %zd bytes data from %s#%hu", nread, ipstr, portno);
+    }
+
+    // TODO
+
+    return;
+
+FREE_UVBUF:
+    free(uvbuf->base - 2);
 }
