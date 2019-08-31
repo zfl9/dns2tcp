@@ -1,5 +1,8 @@
 CC = gcc
 CFLAGS = -std=c99 -Wall -Wextra -O3
+INCLUDES =
+LDFLAGS =
+LIBS = -luv
 SRCS = netutils.c dns2tcp.c
 OBJS = $(SRCS:.c=.o)
 MAIN = dns2tcp
@@ -17,7 +20,7 @@ clean:
 	$(RM) *.o $(MAIN)
 
 $(MAIN): $(OBJS) 
-	$(CC) $(CFLAGS) -s $(OBJS) -o $(MAIN)
+	$(CC) $(CFLAGS) $(INCLUDES) -s -o $(MAIN) $(OBJS) $(LDFLAGS) $(LIBS)
 
 .c.o:
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@

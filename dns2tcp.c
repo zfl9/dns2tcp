@@ -150,7 +150,19 @@ int main(int argc, char *argv[]) {
     LOGINF("[main] tcp remote addr: %s#%hu", g_remote_ipstr, g_remote_portno);
     IF_VERBOSE LOGINF("[main] verbose mode, affect performance");
 
+    g_evloop = uv_default_loop();
+
+    uv_udp_t *udp_server = &(uv_udp_t){0};
+    uv_udp_init(g_evloop, udp_server);
+
+    int retval = uv_udp_bind(udp_server, (void *)&g_listen_skaddr, 0);
+    if (retval < 0) {
+        LOGERR("[main] udp bind failed: (%d) %s", -retval, uv_strerror(retval));
+        return -retval;
+    }
+
     // TODO
 
+    uv_run(g_evloop, UV_RUN_DEFAULT);
     return 0;
 }
