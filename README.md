@@ -32,7 +32,7 @@ git clone https://github.com/zfl9/dns2tcp
 
 # 进入源码目录，编译
 cd dns2tcp
-make INCLUDES="-I/opt/libuv/include" LDFLAGS="-L/opt/libuv/lib" && sudo make install
+make CFLAGS="-pthread" INCLUDES="-I/opt/libuv/include" LDFLAGS="-L/opt/libuv/lib" && sudo make install
 ```
 
 // TODO
