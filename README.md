@@ -34,7 +34,7 @@ git clone https://github.com/zfl9/dns2tcp
 cd dns2tcp
 make CFLAGS="-pthread" INCLUDES="-I/opt/libuv/include" LDFLAGS="-L/opt/libuv/lib" && sudo make install
 ```
-特别是进行交叉编译的时候，这种编译方式是比较推荐的，因为编译出来的 dns2tcp 文件不依赖任何第三方 .so 库文件，所以可以直接拷贝 dns2tcp 可执行文件到目标系统，然后添加可执行权限，执行即可，非常方便。
+这种方式特别适用于交叉编译，因为编译出来的 `dns2tcp` 文件不依赖任何第三方 `.so` 库文件，可直接拷贝到目标系统来运行。
 
 ## 如何运行
 ```bash
