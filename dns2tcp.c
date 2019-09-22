@@ -170,7 +170,7 @@ int main(int argc, char *argv[]) {
     g_udp_server = &(uv_udp_t){0};
     uv_udp_init(g_evloop, g_udp_server);
 
-    int retval = uv_udp_bind(g_udp_server, (void *)&g_listen_skaddr, 0);
+    int retval = uv_udp_bind(g_udp_server, (void *)&g_listen_skaddr, (g_listen_skaddr.sin6_family == AF_INET) ? 0 : UV_UDP_IPV6ONLY);
     if (retval < 0) {
         LOGERR("[main] bind failed: (%d) %s", -retval, uv_strerror(retval));
         return -retval;
