@@ -10,7 +10,7 @@ make && sudo make install
 ```
 dns2tcp 默认安装到 `/usr/local/bin/dns2tcp`，可安装到其它目录，如 `make install DESTDIR=/opt/local/bin`。
 
-**静态链接 libuv**：适用于交叉编译，此方式编译出来的 `dns2tcp` 不依赖任何第三方库，可直接拷贝到目标系统来运行：
+**静态链接 libuv**：适用于交叉编译，此方式编译出来的 `dns2tcp` 不依赖任何第三方库，可直接拷贝到目标系统运行：
 ```bash
 # 进入某个目录
 cd /opt
