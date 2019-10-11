@@ -16,7 +16,7 @@ dns2tcp 默认安装到 `/usr/local/bin/dns2tcp`，可安装到其它目录，�
 cd /opt
 
 # 获取 libuv 源码包
-libuv_version="1.31.0"
+libuv_version="1.32.0" # 定义 libuv 版本号
 wget https://github.com/libuv/libuv/archive/v$libuv_version.tar.gz -Olibuv-$libuv_version.tar.gz
 tar xvf libuv-$libuv_version.tar.gz
 
@@ -32,7 +32,7 @@ git clone https://github.com/zfl9/dns2tcp
 
 # 进入源码目录，编译
 cd dns2tcp
-make CFLAGS="-pthread" INCLUDES="-I/opt/libuv/include" LDFLAGS="-L/opt/libuv/lib" && sudo make install
+make INCLUDES="-I/opt/libuv/include" LDFLAGS="-L/opt/libuv/lib" && sudo make install
 ```
 这种方式特别适用于交叉编译，因为编译出来的可执行文件不依赖任何第三方库，可直接拷贝到目标系统来运行。
 
