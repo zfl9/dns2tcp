@@ -148,8 +148,14 @@ static void parse_command_args(int argc, char *argv[]) {
         goto PRINT_HELP_AND_EXIT;
     }
 
-    parse_address_opt(opt_listen_addr, true);
-    parse_address_opt(opt_remote_addr, false);
+    do {
+        char listenaddr_optstring[strlen(opt_listen_addr) + 1];
+        char remoteaddr_optstring[strlen(opt_remote_addr) + 1];
+        strcpy(listenaddr_optstring, opt_listen_addr);
+        strcpy(remoteaddr_optstring, opt_remote_addr);
+        parse_address_opt(listenaddr_optstring, true);
+        parse_address_opt(remoteaddr_optstring, false);
+    } while (0);
     return;
 
 PRINT_HELP_AND_EXIT:
