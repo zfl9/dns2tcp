@@ -14,5 +14,6 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include "libev/ev.h"
+#undef _GNU_SOURCE
 
 // TODO
