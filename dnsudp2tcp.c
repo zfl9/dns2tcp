@@ -8,7 +8,6 @@
 #include <unistd.h>
 #include <time.h>
 #include <fcntl.h>
-#include <netdb.h>
 #include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/socket.h>
