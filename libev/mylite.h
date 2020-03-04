@@ -20,4 +20,9 @@
 #define EV_CLEANUP_ENABLE 0 /* disable ev_cleanup watcher */
 #define EV_ASYNC_ENABLE 0 /* disbale ev_async watcher */
 
+/* typedef alias */
+typedef struct ev_loop  evloop_t;
+typedef struct ev_io    evio_t;
+typedef struct ev_timer evtimer_t;
+
 #endif
