@@ -347,13 +347,37 @@ int main(int argc, char *argv[]) {
 
     g_event_loop = ev_default_loop(0);
 
-    int udp_sfd = socket(g_listen_skaddr.sin6_family, SOCK_DGRAM, 0);
-    if (udp_sfd < 0) {
+    int sockfd = socket(g_listen_skaddr.sin6_family, SOCK_DGRAM, 0);
+    if (sockfd < 0) {
         LOGERR("[main] create udp socket failed: (%d) %s", errno, strerror(errno));
         return errno;
     }
 
-    // TODO
+    set_nonblock(sockfd);
+    set_reuseaddr(sockfd);
+    if (g_options & OPT_REUSE_PORT) set_reuseport(sockfd);
+    if (g_options & OPT_IPV6_V6ONLY) set_ipv6only(sockfd);
 
+    if (bind(sockfd, (void *)&g_listen_skaddr, g_listen_skaddr.sin6_family == AF_INET ? sizeof(skaddr4_t) : sizeof(skaddr6_t)) < 0) {
+        LOGERR("[main] bind udp address failed: (%d) %s", errno, strerror(errno));
+        return errno;
+    }
+
+    ev_io_init(&g_udp_watcher, udp_recv_cb, sockfd, EV_READ);
+    ev_io_start(g_event_loop, &g_udp_watcher);
+
+    ev_run(g_event_loop, 0);
     return 0;
+}
+
+static void udp_recv_cb(evloop_t *evloop, evio_t *watcher, int events) {
+    // TODO
+}
+
+static void tcp_send_cb(evloop_t *evloop, evio_t *watcher, int events) {
+    // TODO
+}
+
+static void tcp_recv_cb(evloop_t *evloop, evio_t *watcher, int events) {
+    // TODO
 }
