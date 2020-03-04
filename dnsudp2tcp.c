@@ -19,6 +19,22 @@
 
 #define DNS2TCP_VER "dns2tcp v1.1.0"
 
+#ifndef IPV6_V6ONLY
+  #define IPV6_V6ONLY 26
+#endif
+#ifndef SO_REUSEPORT
+  #define SO_REUSEPORT 15
+#endif
+#ifndef TCP_QUICKACK
+  #define TCP_QUICKACK 12
+#endif
+#ifndef TCP_SYNCNT
+  #define TCP_SYNCNT 7
+#endif
+#ifndef MSG_FASTOPEN
+  #define MSG_FASTOPEN 0x20000000
+#endif
+
 #define IP4STRLEN INET_ADDRSTRLEN /* ipv4addr max strlen */
 #define IP6STRLEN INET6_ADDRSTRLEN /* ipv6addr max strlen */
 #define PORTSTRLEN 6 /* "65535", include the null character */
