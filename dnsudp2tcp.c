@@ -7,7 +7,6 @@
 #include <time.h>
 #include <errno.h>
 #include <signal.h>
-#include <getopt.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <arpa/inet.h>
