@@ -15,7 +15,6 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
-#include <sys/utsname.h>
 #include "libev/ev.h"
 #undef _GNU_SOURCE
 
