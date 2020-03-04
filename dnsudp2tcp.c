@@ -255,3 +255,21 @@ PRINT_HELP_AND_EXIT:
     print_command_help();
     exit(1);
 }
+
+int main(int argc, char *argv[]) {
+    signal(SIGPIPE, SIG_IGN);
+    setvbuf(stdout, NULL, _IOLBF, 256);
+    parse_command_args(argc, argv);
+
+    LOGINF("[main] udp listen addr: %s#%hu", g_listen_ipstr, g_listen_portno);
+    LOGINF("[main] tcp remote addr: %s#%hu", g_remote_ipstr, g_remote_portno);
+    if (g_syn_maxcnt) LOGINF("[main] enable TCP_SYNCNT:%hhu feature", g_syn_maxcnt);
+    if (g_options & OPT_REUSE_PORT) LOGINF("[main] enable SO_REUSEPORT feature");
+    if (g_options & OPT_QUICK_ACK) LOGINF("[main] enable TCP_QUICKACK feature");
+    if (g_options & OPT_FAST_OPEN) LOGINF("[main] enable TCP_FASTOPEN feature");
+    IF_VERBOSE LOGINF("[main] verbose mode, affect performance");
+
+    // TODO
+
+    return 0;
+}
