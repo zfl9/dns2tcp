@@ -94,6 +94,60 @@ static void udp_recv_cb(evloop_t *evloop, evio_t *watcher, int events);
 static void tcp_send_cb(evloop_t *evloop, evio_t *watcher, int events);
 static void tcp_recv_cb(evloop_t *evloop, evio_t *watcher, int events);
 
+static void set_nonblock(int sockfd) {
+    int flags = fcntl(sockfd, F_GETFL, 0);
+    if (flags < 0) {
+        LOGERR("[set_nonblock] fcntl(%d, F_GETFL) failed: (%d) %s", sockfd, errno, strerror(errno));
+        exit(errno);
+    }
+    if (fcntl(sockfd, F_SETFL, flags | O_NONBLOCK) < 0) {
+        LOGERR("[set_nonblock] fcntl(%d, F_SETFL) failed: (%d) %s", sockfd, errno, strerror(errno));
+        exit(errno);
+    }
+}
+
+static void set_ipv6only(int sockfd) {
+    if (setsockopt(sockfd, IPPROTO_IPV6, IPV6_V6ONLY, &(int){1}, sizeof(int)) < 0) {
+        LOGERR("[set_ipv6only] setsockopt(%d, IPV6_V6ONLY) failed: (%d) %s", sockfd, errno, strerror(errno));
+        exit(errno);
+    }
+}
+
+static void set_reuseaddr(int sockfd) {
+    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int)) < 0) {
+        LOGERR("[set_reuseaddr] setsockopt(%d, SO_REUSEADDR) failed: (%d) %s", sockfd, errno, strerror(errno));
+        exit(errno);
+    }
+}
+
+static void set_reuseport(int sockfd) {
+    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEPORT, &(int){1}, sizeof(int)) < 0) {
+        LOGERR("[set_reuseport] setsockopt(%d, SO_REUSEPORT) failed: (%d) %s", sockfd, errno, strerror(errno));
+        exit(errno);
+    }
+}
+
+static void set_nodelay(int sockfd) {
+    if (setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, &(int){1}, sizeof(int)) < 0) {
+        LOGERR("[set_nodelay] setsockopt(%d, TCP_NODELAY) failed: (%d) %s", sockfd, errno, strerror(errno));
+        exit(errno);
+    }
+}
+
+static void set_quickack(int sockfd) {
+    if (setsockopt(sockfd, IPPROTO_TCP, TCP_QUICKACK, &(int){1}, sizeof(int)) < 0) {
+        LOGERR("[set_quickack] setsockopt(%d, TCP_QUICKACK) failed: (%d) %s", sockfd, errno, strerror(errno));
+        exit(errno);
+    }
+}
+
+static void set_syncnt(int sockfd, int syncnt) {
+    if (setsockopt(sockfd, IPPROTO_TCP, TCP_SYNCNT, &syncnt, sizeof(syncnt)) < 0) {
+        LOGERR("[set_syncnt] setsockopt(%d, TCP_SYNCNT) failed: (%d) %s", sockfd, errno, strerror(errno));
+        exit(errno);
+    }
+}
+
 static int get_ipstr_family(const char *ipstr) {
     if (!ipstr) return -1; /* invalid */
     uint8_t ipaddr[16]; /* 16-bytes */
