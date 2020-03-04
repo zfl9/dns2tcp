@@ -56,9 +56,10 @@ typedef struct {
 } tcpwatcher_t;
 
 enum {
-    OPT_REUSE_PORT = 1 << 0,
-    OPT_QUICK_ACK  = 1 << 1,
-    OPT_FAST_OPEN  = 1 << 2,
+    OPT_IPV6_V6ONLY = 1 << 0,
+    OPT_REUSE_PORT  = 1 << 1,
+    OPT_QUICK_ACK   = 1 << 2,
+    OPT_FAST_OPEN   = 1 << 3,
 };
 
 static bool       g_verbose                 = false;
@@ -110,16 +111,17 @@ static void parse_sock_addr6(const skaddr6_t *addr, char *ipstr, portno_t *portn
 }
 
 static void print_command_help(void) {
-    printf("usage: dns2tcp <-L listen> <-R remote> [-s syncnt] [-rafvVh]\n"
-           " -L <ip#port>           udp listen address, this is required\n"
-           " -R <ip#port>           tcp remote address, this is required\n"
-           " -s <syncnt>            set TCP_SYNCNT(max) for remote socket\n"
-           " -r                     enable SO_REUSEPORT for listen socket\n"
-           " -a                     enable TCP_QUICKACK for remote socket\n"
-           " -f                     enable TCP_FASTOPEN for remote socket\n"
-           " -v                     print verbose log, default: <disabled>\n"
-           " -V                     print version number of dns2tcp and exit\n"
-           " -h                     print help information of dns2tcp and exit\n"
+    printf("usage: dns2tcp <-L listen> <-R remote> [-s syncnt] [-6rafvVh]\n"
+           " -L <ip#port>            udp listen address, this is required\n"
+           " -R <ip#port>            tcp remote address, this is required\n"
+           " -s <syncnt>             set TCP_SYNCNT(max) for remote socket\n"
+           " -6                      enable IPV6_V6ONLY for listen socket\n"
+           " -r                      enable SO_REUSEPORT for listen socket\n"
+           " -a                      enable TCP_QUICKACK for remote socket\n"
+           " -f                      enable TCP_FASTOPEN for remote socket\n"
+           " -v                      print verbose log, default: <disabled>\n"
+           " -V                      print version number of dns2tcp and exit\n"
+           " -h                      print help information of dns2tcp and exit\n"
            "bug report: https://github.com/zfl9/dns2tcp. email: zfl9.com@gmail.com\n"
     );
 }
@@ -186,7 +188,7 @@ static void parse_command_args(int argc, char *argv[]) {
 
     opterr = 0;
     int shortopt = -1;
-    const char *optstr = "L:R:s:rafvVh";
+    const char *optstr = "L:R:s:6rafvVh";
     while ((shortopt = getopt(argc, argv, optstr)) != -1) {
         switch (shortopt) {
             case 'L':
@@ -209,6 +211,9 @@ static void parse_command_args(int argc, char *argv[]) {
                     printf("[parse_command_args] invalid tcp syn cnt: %s\n", optarg);
                     goto PRINT_HELP_AND_EXIT;
                 }
+                break;
+            case '6':
+                g_options |= OPT_IPV6_V6ONLY;
                 break;
             case 'r':
                 g_options |= OPT_REUSE_PORT;
@@ -263,11 +268,20 @@ int main(int argc, char *argv[]) {
 
     LOGINF("[main] udp listen addr: %s#%hu", g_listen_ipstr, g_listen_portno);
     LOGINF("[main] tcp remote addr: %s#%hu", g_remote_ipstr, g_remote_portno);
-    if (g_syn_maxcnt) LOGINF("[main] enable TCP_SYNCNT:%hhu feature", g_syn_maxcnt);
-    if (g_options & OPT_REUSE_PORT) LOGINF("[main] enable SO_REUSEPORT feature");
-    if (g_options & OPT_QUICK_ACK) LOGINF("[main] enable TCP_QUICKACK feature");
-    if (g_options & OPT_FAST_OPEN) LOGINF("[main] enable TCP_FASTOPEN feature");
+    if (g_syn_maxcnt) LOGINF("[main] enable TCP_SYNCNT:%hhu sockopt", g_syn_maxcnt);
+    if (g_options & OPT_IPV6_V6ONLY) LOGINF("[main] enable IPV6_V6ONLY sockopt");
+    if (g_options & OPT_REUSE_PORT) LOGINF("[main] enable SO_REUSEPORT sockopt");
+    if (g_options & OPT_QUICK_ACK) LOGINF("[main] enable TCP_QUICKACK sockopt");
+    if (g_options & OPT_FAST_OPEN) LOGINF("[main] enable TCP_FASTOPEN sockopt");
     IF_VERBOSE LOGINF("[main] verbose mode, affect performance");
+
+    g_event_loop = ev_default_loop(0);
+
+    int udp_sfd = socket(g_listen_skaddr.sin6_family, SOCK_DGRAM, 0);
+    if (udp_sfd < 0) {
+        LOGERR("[main] create udp socket failed: (%d) %s", errno, strerror(errno));
+        return errno;
+    }
 
     // TODO
 
