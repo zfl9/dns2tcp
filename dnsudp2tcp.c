@@ -90,9 +90,10 @@ static char       g_remote_ipstr[IP6STRLEN] = {0};
 static portno_t   g_remote_portno           = 0;
 static skaddr6_t  g_remote_skaddr           = {0};
 
-static void udp_recv_cb(evloop_t *evloop, evio_t *watcher, int events);
-static void tcp_send_cb(evloop_t *evloop, evio_t *watcher, int events);
-static void tcp_recv_cb(evloop_t *evloop, evio_t *watcher, int events);
+static void udp_recvmsg_cb(evloop_t *evloop, evio_t *watcher, int events);
+static void tcp_connect_cb(evloop_t *evloop, evio_t *watcher, int events);
+static void tcp_sendmsg_cb(evloop_t *evloop, evio_t *watcher, int events);
+static void tcp_recvmsg_cb(evloop_t *evloop, evio_t *watcher, int events);
 
 static void set_nonblock(int sockfd) {
     int flags = fcntl(sockfd, F_GETFL, 0);
@@ -363,21 +364,25 @@ int main(int argc, char *argv[]) {
         return errno;
     }
 
-    ev_io_init(&g_udp_watcher, udp_recv_cb, sockfd, EV_READ);
+    ev_io_init(&g_udp_watcher, udp_recvmsg_cb, sockfd, EV_READ);
     ev_io_start(g_event_loop, &g_udp_watcher);
 
     ev_run(g_event_loop, 0);
     return 0;
 }
 
-static void udp_recv_cb(evloop_t *evloop, evio_t *watcher, int events) {
+static void udp_recvmsg_cb(evloop_t *evloop, evio_t *watcher, int events) {
     // TODO
 }
 
-static void tcp_send_cb(evloop_t *evloop, evio_t *watcher, int events) {
+static void tcp_connect_cb(evloop_t *evloop, evio_t *watcher, int events) {
     // TODO
 }
 
-static void tcp_recv_cb(evloop_t *evloop, evio_t *watcher, int events) {
+static void tcp_sendmsg_cb(evloop_t *evloop, evio_t *watcher, int events) {
+    // TODO
+}
+
+static void tcp_recvmsg_cb(evloop_t *evloop, evio_t *watcher, int events) {
     // TODO
 }
