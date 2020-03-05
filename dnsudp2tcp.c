@@ -372,25 +372,143 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 
-static void udp_recvmsg_cb(evloop_t *evloop, evio_t *watcher, int events) {
+static void udp_recvmsg_cb(evloop_t *evloop, evio_t *watcher, int events __attribute__((unused))) {
     tcpwatcher_t *tcpw = malloc(sizeof(*tcpw));
-    ssize_t nrecv = recvfrom(watcher->fd, tcpw->buffer, UDPDGRAM_MAXSIZ, 0, (void *)&tcpw->srcaddr, &(socklen_t){sizeof(tcpw->srcaddr)});
+    ssize_t nrecv = recvfrom(watcher->fd, (void *)tcpw->buffer + 2, UDPDGRAM_MAXSIZ, 0, (void *)&tcpw->srcaddr, &(socklen_t){sizeof(tcpw->srcaddr)});
     if (nrecv < 0) {
-        LOGERR("[udp_recvmsg_cb] recvfrom(%s#%hu) failed: (%d) %s", g_listen_ipstr, g_listen_portno, errno, strerror(errno));
-        free(tcpw);
+        LOGERR("[udp_recvmsg_cb] recvfrom udp socket failed: (%d) %s", errno, strerror(errno));
+        goto FREE_TCP_WATCHER;
+    }
+    IF_VERBOSE {
+        portno_t portno;
+        if (tcpw->srcaddr.sin6_family == AF_INET) {
+            parse_sock_addr4((void *)&tcpw->srcaddr, g_ipstr_buf, &portno);
+        } else {
+            parse_sock_addr6((void *)&tcpw->srcaddr, g_ipstr_buf, &portno);
+        }
+        LOGINF("[udp_recvmsg_cb] recvfrom %s#%hu, recv bytes: %zd", g_ipstr_buf, portno, nrecv);
+    }
+    *(uint16_t *)tcpw->buffer = htons(nrecv);
+    nrecv += 2; /* msglen + msgbuf */
+    tcpw->nrcvsnd = 0;
+
+    int sockfd = socket(g_remote_skaddr.sin6_family, SOCK_STREAM, 0);
+    if (sockfd < 0) {
+        LOGERR("[udp_recvmsg_cb] create tcp socket failed: (%d) %s", errno, strerror(errno));
+        goto CLOSE_TCP_SOCKFD;
+    }
+    set_nonblock(sockfd);
+    set_reuseaddr(sockfd);
+    set_nodelay(sockfd);
+    if (g_syn_maxcnt) set_syncnt(sockfd, g_syn_maxcnt);
+    if (g_options & OPT_QUICK_ACK) set_quickack(sockfd);
+
+    bool skip_connect = false;
+    if (!(g_options & OPT_FAST_OPEN)) {
+        if (connect(sockfd, (void *)&g_remote_skaddr, sizeof(g_remote_skaddr)) < 0 && errno != EINPROGRESS) {
+            LOGERR("[udp_recvmsg_cb] connect to %s#%hu failed: (%d) %s", g_remote_ipstr, g_remote_portno, errno, strerror(errno));
+            goto CLOSE_TCP_SOCKFD;
+        }
+        IF_VERBOSE LOGINF("[udp_recvmsg_cb] try to connect to %s#%hu", g_remote_ipstr, g_remote_portno);
+    } else {
+        ssize_t nsend = sendto(sockfd, tcpw->buffer, nrecv, MSG_FASTOPEN, (void *)&g_remote_skaddr, sizeof(g_remote_skaddr));
+        if (nsend < 0) {
+            if (errno != EINPROGRESS) {
+                LOGERR("[udp_recvmsg_cb] connect to %s#%hu failed: (%d) %s", g_remote_ipstr, g_remote_portno, errno, strerror(errno));
+                goto CLOSE_TCP_SOCKFD;
+            }
+            IF_VERBOSE LOGINF("[udp_recvmsg_cb] try to connect to %s#%hu", g_remote_ipstr, g_remote_portno);
+        } else {
+            skip_connect = true;
+            tcpw->nrcvsnd = nsend;
+            IF_VERBOSE LOGINF("[udp_recvmsg_cb] tcp_fastopen success, send bytes: %zd", nsend);
+        }
+    }
+
+    if (skip_connect && tcpw->nrcvsnd >= nrecv) {
+        ev_io_init((evio_t *)tcpw, tcp_recvmsg_cb, sockfd, EV_READ);
+    } else {
+        ev_io_init((evio_t *)tcpw, skip_connect ? tcp_sendmsg_cb : tcp_connect_cb, sockfd, EV_WRITE);
+    }
+    ev_io_start(evloop, (void *)tcpw);
+    return;
+
+CLOSE_TCP_SOCKFD:
+    close(sockfd);
+FREE_TCP_WATCHER:
+    free(tcpw);
+}
+
+static void tcp_connect_cb(evloop_t *evloop, evio_t *watcher, int events __attribute__((unused))) {
+    if (getsockopt(watcher->fd, SOL_SOCKET, SO_ERROR, &errno, &(socklen_t){sizeof(errno)}) < 0 || errno) {
+        LOGERR("[tcp_connect_cb] connect to %s#%hu failed: (%d) %s", g_remote_ipstr, g_remote_portno, errno, strerror(errno));
+        ev_io_stop(evloop, watcher);
+        close(watcher->fd);
+        free(watcher);
         return;
     }
-    tcpw->nrcvsnd = 0;
+    IF_VERBOSE LOGINF("[tcp_connect_cb] connect to %s#%hu success", g_remote_ipstr, g_remote_portno);
+    ev_set_cb(watcher, tcp_sendmsg_cb);
+    ev_invoke(evloop, watcher, EV_WRITE);
 }
 
-static void tcp_connect_cb(evloop_t *evloop, evio_t *watcher, int events) {
-    // TODO
+static void tcp_sendmsg_cb(evloop_t *evloop, evio_t *watcher, int events __attribute__((unused))) {
+    tcpwatcher_t *tcpw = (void *)watcher;
+    void *buffer = tcpw->buffer;
+    uint16_t bufferlen = 2 + ntohs(*(uint16_t *)buffer);
+    ssize_t nsend = send(watcher->fd, buffer + tcpw->nrcvsnd, bufferlen - tcpw->nrcvsnd, 0);
+    if (nsend < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+        LOGERR("[tcp_sendmsg_cb] sendmsg to %s#%hu failed: (%d) %s", g_remote_ipstr, g_remote_portno, errno, strerror(errno));
+        ev_io_stop(evloop, watcher);
+        close(watcher->fd);
+        free(watcher);
+        return;
+    }
+    IF_VERBOSE LOGINF("[tcp_sendmsg_cb] sendmsg success, send bytes: %zd", nsend);
+    tcpw->nrcvsnd += nsend;
+    if (tcpw->nrcvsnd >= bufferlen) {
+        tcpw->nrcvsnd = 0;
+        ev_io_stop(evloop, watcher);
+        ev_io_init(watcher, tcp_recvmsg_cb, watcher->fd, EV_READ);
+        ev_io_start(evloop, watcher);
+    }
 }
 
-static void tcp_sendmsg_cb(evloop_t *evloop, evio_t *watcher, int events) {
-    // TODO
-}
+static void tcp_recvmsg_cb(evloop_t *evloop, evio_t *watcher, int events __attribute__((unused))) {
+    tcpwatcher_t *tcpw = (void *)watcher;
+    void *buffer = tcpw->buffer;
 
-static void tcp_recvmsg_cb(evloop_t *evloop, evio_t *watcher, int events) {
-    // TODO
+    ssize_t nrecv = recv(watcher->fd, buffer + tcpw->nrcvsnd, 2 + UDPDGRAM_MAXSIZ - tcpw->nrcvsnd, 0);
+    if (nrecv < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+        LOGERR("[tcp_recvmsg_cb] recvmsg from %s#%hu failed: (%d) %s", g_remote_ipstr, g_remote_portno, errno, strerror(errno));
+        goto FREE_TCP_WATCHER;
+    }
+    tcpw->nrcvsnd += nrecv;
+    IF_VERBOSE LOGINF("[tcp_recvmsg_cb] recvmsg success, recv bytes: %zd", nrecv); 
+    if (tcpw->nrcvsnd < 2 || tcpw->nrcvsnd < 2 + ntohs(*(uint16_t *)buffer)) return;
+
+    ssize_t nsend = sendto(g_udp_watcher.fd, buffer + 2, ntohs(*(uint16_t *)buffer), 0, (void *)&tcpw->srcaddr, sizeof(tcpw->srcaddr));
+    if (nsend < 0) {
+        portno_t portno;
+        if (tcpw->srcaddr.sin6_family == AF_INET) {
+            parse_sock_addr4((void *)&tcpw->srcaddr, g_ipstr_buf, &portno);
+        } else {
+            parse_sock_addr6((void *)&tcpw->srcaddr, g_ipstr_buf, &portno);
+        }
+        LOGERR("[tcp_recvmsg_cb] sendmsg to %s#%hu failed: (%d) %s", g_ipstr_buf, portno, errno, strerror(errno));
+    } else {
+        IF_VERBOSE {
+            portno_t portno;
+            if (tcpw->srcaddr.sin6_family == AF_INET) {
+                parse_sock_addr4((void *)&tcpw->srcaddr, g_ipstr_buf, &portno);
+            } else {
+                parse_sock_addr6((void *)&tcpw->srcaddr, g_ipstr_buf, &portno);
+            }
+            LOGINF("[tcp_recvmsg_cb] sendmsg to %s#%hu success, send bytes: %zd", g_ipstr_buf, portno, nsend);
+        }
+    }
+FREE_TCP_WATCHER:
+    ev_io_stop(evloop, watcher);
+    close(watcher->fd);
+    free(watcher);
 }
