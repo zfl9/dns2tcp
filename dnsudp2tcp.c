@@ -66,8 +66,8 @@ typedef struct sockaddr_in6 skaddr6_t;
 
 typedef struct {
     evio_t    watcher;
-    void     *buffer;
-    uint16_t  nrecv;
+    uint8_t   buffer[2 + UDPDGRAM_MAXSIZ]; /* msglen(16bit) + msgbuf */
+    uint16_t  nrcvsnd;
     skaddr6_t srcaddr;
 } tcpwatcher_t;
 
@@ -89,6 +89,7 @@ static skaddr6_t  g_listen_skaddr           = {0};
 static char       g_remote_ipstr[IP6STRLEN] = {0};
 static portno_t   g_remote_portno           = 0;
 static skaddr6_t  g_remote_skaddr           = {0};
+static char       g_ipstr_buf[IP6STRLEN]    = {0};
 
 static void udp_recvmsg_cb(evloop_t *evloop, evio_t *watcher, int events);
 static void tcp_connect_cb(evloop_t *evloop, evio_t *watcher, int events);
@@ -372,7 +373,14 @@ int main(int argc, char *argv[]) {
 }
 
 static void udp_recvmsg_cb(evloop_t *evloop, evio_t *watcher, int events) {
-    // TODO
+    tcpwatcher_t *tcpw = malloc(sizeof(*tcpw));
+    ssize_t nrecv = recvfrom(watcher->fd, tcpw->buffer, UDPDGRAM_MAXSIZ, 0, (void *)&tcpw->srcaddr, &(socklen_t){sizeof(tcpw->srcaddr)});
+    if (nrecv < 0) {
+        LOGERR("[udp_recvmsg_cb] recvfrom(%s#%hu) failed: (%d) %s", g_listen_ipstr, g_listen_portno, errno, strerror(errno));
+        free(tcpw);
+        return;
+    }
+    tcpw->nrcvsnd = 0;
 }
 
 static void tcp_connect_cb(evloop_t *evloop, evio_t *watcher, int events) {
