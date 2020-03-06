@@ -181,6 +181,13 @@ static void parse_sock_addr6(const skaddr6_t *addr, char *ipstr, portno_t *portn
     inet_ntop(AF_INET6, &addr->sin6_addr, ipstr, IP6STRLEN);
     *portno = ntohs(addr->sin6_port);
 }
+static void parse_sock_addr(const void *addr, char *ipstr, portno_t *portno) {
+    if (((skaddr4_t *)addr)->sin_family == AF_INET) {
+        parse_sock_addr4(addr, ipstr, portno);
+    } else {
+        parse_sock_addr6(addr, ipstr, portno);
+    }
+}
 
 static void print_command_help(void) {
     printf("usage: dns2tcp <-L listen> <-R remote> [-s syncnt] [-6rafvVh]\n"
@@ -381,11 +388,7 @@ static void udp_recvmsg_cb(evloop_t *evloop, evio_t *watcher, int events __attri
     }
     IF_VERBOSE {
         portno_t portno;
-        if (tcpw->srcaddr.sin6_family == AF_INET) {
-            parse_sock_addr4((void *)&tcpw->srcaddr, g_ipstr_buf, &portno);
-        } else {
-            parse_sock_addr6((void *)&tcpw->srcaddr, g_ipstr_buf, &portno);
-        }
+        parse_sock_addr(&tcpw->srcaddr, g_ipstr_buf, &portno);
         LOGINF("[udp_recvmsg_cb] recv from %s#%hu, nrecv:%zd", g_ipstr_buf, portno, nrecv);
     }
     *(uint16_t *)tcpw->buffer = htons(nrecv);
@@ -490,20 +493,12 @@ static void tcp_recvmsg_cb(evloop_t *evloop, evio_t *watcher, int events __attri
     ssize_t nsend = sendto(g_udp_watcher.fd, buffer + 2, ntohs(*(uint16_t *)buffer), 0, (void *)&tcpw->srcaddr, sizeof(tcpw->srcaddr));
     if (nsend < 0) {
         portno_t portno;
-        if (tcpw->srcaddr.sin6_family == AF_INET) {
-            parse_sock_addr4((void *)&tcpw->srcaddr, g_ipstr_buf, &portno);
-        } else {
-            parse_sock_addr6((void *)&tcpw->srcaddr, g_ipstr_buf, &portno);
-        }
+        parse_sock_addr(&tcpw->srcaddr, g_ipstr_buf, &portno);
         LOGERR("[tcp_recvmsg_cb] send to %s#%hu failed: (%d) %s", g_ipstr_buf, portno, errno, strerror(errno));
     } else {
         IF_VERBOSE {
             portno_t portno;
-            if (tcpw->srcaddr.sin6_family == AF_INET) {
-                parse_sock_addr4((void *)&tcpw->srcaddr, g_ipstr_buf, &portno);
-            } else {
-                parse_sock_addr6((void *)&tcpw->srcaddr, g_ipstr_buf, &portno);
-            }
+            parse_sock_addr(&tcpw->srcaddr, g_ipstr_buf, &portno);
             LOGINF("[tcp_recvmsg_cb] send to %s#%hu, nsend:%zd", g_ipstr_buf, portno, nsend);
         }
     }
