@@ -264,7 +264,7 @@ static void parse_command_args(int argc, char *argv[]) {
     while ((shortopt = getopt(argc, argv, optstr)) != -1) {
         switch (shortopt) {
             case 'L':
-                if (strlen(optarg) + 1 > IP4STRLEN + PORTSTRLEN) {
+                if (strlen(optarg) + 1 > IP6STRLEN + PORTSTRLEN) {
                     printf("[parse_command_args] invalid listen addr: %s\n", optarg);
                     goto PRINT_HELP_AND_EXIT;
                 }
