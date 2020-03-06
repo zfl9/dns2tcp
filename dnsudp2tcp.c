@@ -372,8 +372,9 @@ int main(int argc, char *argv[]) {
         return errno;
     }
 
-    ev_io_init(&g_udp_watcher, udp_recvmsg_cb, sockfd, EV_READ);
-    ev_io_start(g_event_loop, &g_udp_watcher);
+    evio_t *udp_watcher = &g_udp_watcher; /* suppress warning */
+    ev_io_init(udp_watcher, udp_recvmsg_cb, sockfd, EV_READ);
+    ev_io_start(g_event_loop, udp_watcher);
 
     ev_run(g_event_loop, 0);
     return 0;
