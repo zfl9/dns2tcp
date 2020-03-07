@@ -161,37 +161,29 @@ static int get_ipstr_family(const char *ipstr) {
     }
 }
 
-static void build_sock_addr4(skaddr4_t *addr, const char *ipstr, portno_t portno) {
-    addr->sin_family = AF_INET;
-    inet_pton(AF_INET, ipstr, &addr->sin_addr);
-    addr->sin_port = htons(portno);
-}
-static void build_sock_addr6(skaddr6_t *addr, const char *ipstr, portno_t portno) {
-    addr->sin6_family = AF_INET6;
-    inet_pton(AF_INET6, ipstr, &addr->sin6_addr);
-    addr->sin6_port = htons(portno);
-}
-static void build_sock_addr(unsigned ipfamily, void *addr, const char *ipstr, portno_t portno) {
+static void build_socket_addr(int ipfamily, void *skaddr, const char *ipstr, portno_t portno) {
     if (ipfamily == AF_INET) {
-        build_sock_addr4(addr, ipstr, portno);
+        skaddr4_t *addr = skaddr;
+        addr->sin_family = AF_INET;
+        inet_pton(AF_INET, ipstr, &addr->sin_addr);
+        addr->sin_port = htons(portno);
     } else {
-        build_sock_addr6(addr, ipstr, portno);
+        skaddr6_t *addr = skaddr;
+        addr->sin6_family = AF_INET6;
+        inet_pton(AF_INET6, ipstr, &addr->sin6_addr);
+        addr->sin6_port = htons(portno);
     }
 }
 
-static void parse_sock_addr4(const skaddr4_t *addr, char *ipstr, portno_t *portno) {
-    inet_ntop(AF_INET, &addr->sin_addr, ipstr, IP4STRLEN);
-    *portno = ntohs(addr->sin_port);
-}
-static void parse_sock_addr6(const skaddr6_t *addr, char *ipstr, portno_t *portno) {
-    inet_ntop(AF_INET6, &addr->sin6_addr, ipstr, IP6STRLEN);
-    *portno = ntohs(addr->sin6_port);
-}
-static void parse_sock_addr(const void *addr, char *ipstr, portno_t *portno) {
-    if (((skaddr4_t *)addr)->sin_family == AF_INET) {
-        parse_sock_addr4(addr, ipstr, portno);
+static void parse_socket_addr(const void *skaddr, char *ipstr, portno_t *portno) {
+    if (((skaddr4_t *)skaddr)->sin_family == AF_INET) {
+        const skaddr4_t *addr = skaddr;
+        inet_ntop(AF_INET, &addr->sin_addr, ipstr, IP4STRLEN);
+        *portno = ntohs(addr->sin_port);
     } else {
-        parse_sock_addr6(addr, ipstr, portno);
+        const skaddr6_t *addr = skaddr;
+        inet_ntop(AF_INET6, &addr->sin6_addr, ipstr, IP6STRLEN);
+        *portno = ntohs(addr->sin6_port);
     }
 }
 
@@ -253,11 +245,11 @@ static void parse_address_opt(char *ip_port_str, bool is_listen_addr) {
     if (is_listen_addr) {
         strcpy(g_listen_ipstr, ipstr);
         g_listen_portno = portno;
-        build_sock_addr(ipfamily, &g_listen_skaddr, ipstr, portno);
+        build_socket_addr(ipfamily, &g_listen_skaddr, ipstr, portno);
     } else {
         strcpy(g_remote_ipstr, ipstr);
         g_remote_portno = portno;
-        build_sock_addr(ipfamily, &g_remote_skaddr, ipstr, portno);
+        build_socket_addr(ipfamily, &g_remote_skaddr, ipstr, portno);
     }
     return;
 
@@ -393,7 +385,7 @@ static void udp_recvmsg_cb(evloop_t *evloop, evio_t *watcher, int events __attri
     }
     IF_VERBOSE {
         portno_t portno;
-        parse_sock_addr(&tcpw->srcaddr, g_ipstr_buf, &portno);
+        parse_socket_addr(&tcpw->srcaddr, g_ipstr_buf, &portno);
         LOGINF("[udp_recvmsg_cb] recv from %s#%hu, nrecv:%zd", g_ipstr_buf, portno, nrecv);
     }
     *(uint16_t *)tcpw->buffer = htons(nrecv);
@@ -498,12 +490,12 @@ static void tcp_recvmsg_cb(evloop_t *evloop, evio_t *watcher, int events __attri
     ssize_t nsend = sendto(g_udp_sockfd, buffer + 2, ntohs(*(uint16_t *)buffer), 0, (void *)&tcpw->srcaddr, sizeof(tcpw->srcaddr));
     if (nsend < 0) {
         portno_t portno;
-        parse_sock_addr(&tcpw->srcaddr, g_ipstr_buf, &portno);
+        parse_socket_addr(&tcpw->srcaddr, g_ipstr_buf, &portno);
         LOGERR("[tcp_recvmsg_cb] send to %s#%hu failed: (%d) %s", g_ipstr_buf, portno, errno, strerror(errno));
     } else {
         IF_VERBOSE {
             portno_t portno;
-            parse_sock_addr(&tcpw->srcaddr, g_ipstr_buf, &portno);
+            parse_socket_addr(&tcpw->srcaddr, g_ipstr_buf, &portno);
             LOGINF("[tcp_recvmsg_cb] send to %s#%hu, nsend:%zd", g_ipstr_buf, portno, nsend);
         }
     }
