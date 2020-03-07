@@ -390,7 +390,8 @@ static void udp_recvmsg_cb(evloop_t *evloop, evio_t *watcher __attribute__((unus
         parse_socket_addr(&tcpw->srcaddr, g_ipstr_buf, &portno);
         LOGINF("[udp_recvmsg_cb] recv from %s#%hu, nrecv:%zd", g_ipstr_buf, portno, nrecv);
     }
-    *(uint16_t *)tcpw->buffer = htons(nrecv);
+    uint16_t *msglen_ptr = (void *)tcpw->buffer;
+    *msglen_ptr = htons(nrecv); /* msg length */
     nrecv += 2; /* msglen + msgbuf */
     tcpw->nrcvsnd = 0;
 
@@ -457,7 +458,8 @@ static void tcp_connect_cb(evloop_t *evloop, evio_t *watcher, int events __attri
 
 static void tcp_sendmsg_cb(evloop_t *evloop, evio_t *watcher, int events __attribute__((unused))) {
     tcpwatcher_t *tcpw = (void *)watcher;
-    uint16_t datalen = 2 + ntohs(*(uint16_t *)tcpw->buffer);
+    uint16_t *msglen_ptr = (void *)tcpw->buffer;
+    uint16_t datalen = 2 + ntohs(*msglen_ptr);
     ssize_t nsend = send(watcher->fd, (void *)tcpw->buffer + tcpw->nrcvsnd, datalen - tcpw->nrcvsnd, 0);
     if (nsend < 0) {
         if (errno == EAGAIN || errno == EWOULDBLOCK) return;
