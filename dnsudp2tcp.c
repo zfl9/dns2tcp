@@ -376,11 +376,13 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 
-static void udp_recvmsg_cb(evloop_t *evloop, evio_t *watcher, int events __attribute__((unused))) {
+static void udp_recvmsg_cb(evloop_t *evloop, evio_t *watcher __attribute__((unused)), int events __attribute__((unused))) {
     tcpwatcher_t *tcpw = malloc(sizeof(*tcpw));
-    ssize_t nrecv = recvfrom(watcher->fd, (void *)tcpw->buffer + 2, UDPDGRAM_MAXSIZ, 0, (void *)&tcpw->srcaddr, &(socklen_t){sizeof(tcpw->srcaddr)});
+    ssize_t nrecv = recvfrom(g_udp_sockfd, (void *)tcpw->buffer + 2, UDPDGRAM_MAXSIZ, 0, (void *)&tcpw->srcaddr, &(socklen_t){sizeof(tcpw->srcaddr)});
     if (nrecv < 0) {
-        LOGERR("[udp_recvmsg_cb] recv from udp socket failed: (%d) %s", errno, strerror(errno));
+        if (errno != EAGAIN && errno != EWOULDBLOCK) {
+            LOGERR("[udp_recvmsg_cb] recv from udp socket: (%d) %s", errno, strerror(errno));
+        }
         goto FREE_TCP_WATCHER;
     }
     IF_VERBOSE {
@@ -394,8 +396,8 @@ static void udp_recvmsg_cb(evloop_t *evloop, evio_t *watcher, int events __attri
 
     int sockfd = socket(g_remote_skaddr.sin6_family, SOCK_STREAM, 0);
     if (sockfd < 0) {
-        LOGERR("[udp_recvmsg_cb] create tcp socket failed: (%d) %s", errno, strerror(errno));
-        goto CLOSE_TCP_SOCKFD;
+        LOGERR("[udp_recvmsg_cb] create tcp socket: (%d) %s", errno, strerror(errno));
+        goto FREE_TCP_WATCHER;
     }
     set_nonblock(sockfd);
     set_reuseaddr(sockfd);
@@ -404,25 +406,25 @@ static void udp_recvmsg_cb(evloop_t *evloop, evio_t *watcher, int events __attri
     if (g_options & OPT_QUICK_ACK) set_quickack(sockfd);
 
     bool skip_connect = false;
-    if (!(g_options & OPT_FAST_OPEN)) {
-        if (connect(sockfd, (void *)&g_remote_skaddr, sizeof(g_remote_skaddr)) < 0 && errno != EINPROGRESS) {
-            LOGERR("[udp_recvmsg_cb] connect to %s#%hu failed: (%d) %s", g_remote_ipstr, g_remote_portno, errno, strerror(errno));
-            goto CLOSE_TCP_SOCKFD;
-        }
-        IF_VERBOSE LOGINF("[udp_recvmsg_cb] try to connect to %s#%hu", g_remote_ipstr, g_remote_portno);
-    } else {
-        ssize_t nsend = sendto(sockfd, tcpw->buffer, nrecv, MSG_FASTOPEN, (void *)&g_remote_skaddr, sizeof(g_remote_skaddr));
+    if (g_options & OPT_FAST_OPEN) {
+        ssize_t nsend = sendto(sockfd, tcpw->buffer, nrecv, MSG_FASTOPEN, (void *)&g_remote_skaddr, g_remote_skaddr.sin6_family == AF_INET ? sizeof(skaddr4_t) : sizeof(skaddr6_t));
         if (nsend < 0) {
             if (errno != EINPROGRESS) {
-                LOGERR("[udp_recvmsg_cb] connect to %s#%hu failed: (%d) %s", g_remote_ipstr, g_remote_portno, errno, strerror(errno));
+                LOGERR("[udp_recvmsg_cb] connect to %s#%hu: (%d) %s", g_remote_ipstr, g_remote_portno, errno, strerror(errno));
                 goto CLOSE_TCP_SOCKFD;
             }
             IF_VERBOSE LOGINF("[udp_recvmsg_cb] try to connect to %s#%hu", g_remote_ipstr, g_remote_portno);
         } else {
             skip_connect = true;
             tcpw->nrcvsnd = nsend;
-            IF_VERBOSE LOGINF("[udp_recvmsg_cb] tfo connect success, nsend:%zd", nsend);
+            IF_VERBOSE LOGINF("[udp_recvmsg_cb] tcp_fastopen connect, nsend:%zd", nsend);
         }
+    } else {
+        if (connect(sockfd, (void *)&g_remote_skaddr, g_remote_skaddr.sin6_family == AF_INET ? sizeof(skaddr4_t) : sizeof(skaddr6_t)) < 0 && errno != EINPROGRESS) {
+            LOGERR("[udp_recvmsg_cb] connect to %s#%hu: (%d) %s", g_remote_ipstr, g_remote_portno, errno, strerror(errno));
+            goto CLOSE_TCP_SOCKFD;
+        }
+        IF_VERBOSE LOGINF("[udp_recvmsg_cb] try to connect to %s#%hu", g_remote_ipstr, g_remote_portno);
     }
 
     if (skip_connect && tcpw->nrcvsnd >= nrecv) {
@@ -430,7 +432,7 @@ static void udp_recvmsg_cb(evloop_t *evloop, evio_t *watcher, int events __attri
     } else {
         ev_io_init((evio_t *)tcpw, skip_connect ? tcp_sendmsg_cb : tcp_connect_cb, sockfd, EV_WRITE);
     }
-    ev_io_start(evloop, (void *)tcpw);
+    ev_io_start(evloop, (evio_t *)tcpw);
     return;
 
 CLOSE_TCP_SOCKFD:
