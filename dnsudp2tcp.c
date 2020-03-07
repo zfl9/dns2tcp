@@ -405,7 +405,7 @@ static void udp_recvmsg_cb(evloop_t *evloop, evio_t *watcher __attribute__((unus
     if (g_syn_maxcnt) set_syncnt(sockfd, g_syn_maxcnt);
     if (g_options & OPT_QUICK_ACK) set_quickack(sockfd);
 
-    bool skip_connect = false;
+    bool tfo_succ = false;
     if (g_options & OPT_FAST_OPEN) {
         ssize_t nsend = sendto(sockfd, tcpw->buffer, nrecv, MSG_FASTOPEN, (void *)&g_remote_skaddr, g_remote_skaddr.sin6_family == AF_INET ? sizeof(skaddr4_t) : sizeof(skaddr6_t));
         if (nsend < 0) {
@@ -415,7 +415,7 @@ static void udp_recvmsg_cb(evloop_t *evloop, evio_t *watcher __attribute__((unus
             }
             IF_VERBOSE LOGINF("[udp_recvmsg_cb] try to connect to %s#%hu", g_remote_ipstr, g_remote_portno);
         } else {
-            skip_connect = true;
+            tfo_succ = true;
             tcpw->nrcvsnd = nsend;
             IF_VERBOSE LOGINF("[udp_recvmsg_cb] tcp_fastopen connect, nsend:%zd", nsend);
         }
@@ -427,11 +427,11 @@ static void udp_recvmsg_cb(evloop_t *evloop, evio_t *watcher __attribute__((unus
         IF_VERBOSE LOGINF("[udp_recvmsg_cb] try to connect to %s#%hu", g_remote_ipstr, g_remote_portno);
     }
 
-    if (skip_connect && tcpw->nrcvsnd >= nrecv) {
+    if (tfo_succ && tcpw->nrcvsnd >= nrecv) {
         tcpw->nrcvsnd = 0; /* reset to zero for recv data */
         ev_io_init((evio_t *)tcpw, tcp_recvmsg_cb, sockfd, EV_READ);
     } else {
-        ev_io_init((evio_t *)tcpw, skip_connect ? tcp_sendmsg_cb : tcp_connect_cb, sockfd, EV_WRITE);
+        ev_io_init((evio_t *)tcpw, tfo_succ ? tcp_sendmsg_cb : tcp_connect_cb, sockfd, EV_WRITE);
     }
     ev_io_start(evloop, (evio_t *)tcpw);
     return;
@@ -450,7 +450,7 @@ static void tcp_connect_cb(evloop_t *evloop, evio_t *watcher, int events __attri
         free(watcher);
         return;
     }
-    IF_VERBOSE LOGINF("[tcp_connect_cb] connected to %s#%hu", g_remote_ipstr, g_remote_portno);
+    IF_VERBOSE LOGINF("[tcp_connect_cb] connect to %s#%hu succeed", g_remote_ipstr, g_remote_portno);
     ev_set_cb(watcher, tcp_sendmsg_cb);
     ev_invoke(evloop, watcher, EV_WRITE);
 }
@@ -495,11 +495,13 @@ static void tcp_recvmsg_cb(evloop_t *evloop, evio_t *watcher, int events __attri
     IF_VERBOSE LOGINF("[tcp_recvmsg_cb] recv from %s#%hu, nrecv:%zd", g_remote_ipstr, g_remote_portno, nrecv);
     if (tcpw->nrcvsnd < 2 || tcpw->nrcvsnd < 2 + ntohs(*(uint16_t *)buffer)) return;
 
-    ssize_t nsend = sendto(g_udp_sockfd, buffer + 2, ntohs(*(uint16_t *)buffer), 0, (void *)&tcpw->srcaddr, sizeof(tcpw->srcaddr));
+    const void *sendto_skaddr = &tcpw->srcaddr;
+    socklen_t sendto_skaddrlen = tcpw->srcaddr.sin6_family == AF_INET ? sizeof(skaddr4_t) : sizeof(skaddr6_t);
+    ssize_t nsend = sendto(g_udp_sockfd, buffer + 2, ntohs(*(uint16_t *)buffer), 0, sendto_skaddr, sendto_skaddrlen);
     if (nsend < 0) {
         portno_t portno;
         parse_socket_addr(&tcpw->srcaddr, g_ipstr_buf, &portno);
-        LOGERR("[tcp_recvmsg_cb] send to %s#%hu failed: (%d) %s", g_ipstr_buf, portno, errno, strerror(errno));
+        LOGERR("[tcp_recvmsg_cb] send to %s#%hu: (%d) %s", g_ipstr_buf, portno, errno, strerror(errno));
     } else {
         IF_VERBOSE {
             portno_t portno;
