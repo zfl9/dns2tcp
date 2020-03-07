@@ -34,9 +34,9 @@ usage: dns2tcp <-L listen> <-R remote> [-s syncnt] [-6rafvVh]
 bug report: https://github.com/zfl9/dns2tcp. email: zfl9.com@gmail.com
 ```
 `-s`：对`TCP`套接字启用`TCP_SYNCNT`选项，其值将影响`TCP`连接超时时间，但其并不等于超时时间，具体请谷歌。<br>
-`-6`：对`UDP`套接字启用`IPV6_V6ONLY`选项，该选项与`IPv4-mapped IPv6 address`有关系，了解详细情况请谷歌。<br>
+`-6`：对`UDP`套接字启用`IPV6_V6ONLY`选项，该选项与`IPv4-mapped IPv6 address`有关系，请谷歌以了解详细情况。<br>
 `-r`：对`UDP`套接字设置`SO_REUSEPORT`选项，此选项在`Linux 3.9+`才有(打过相应内核补丁除外)，用于多进程负载均衡。<br>
-`-a`：对`TCP`套接字设置`TCP_QUICKACK`选项，此选项在`Linux 2.4.4+`才有，和`TCP_NODELAY`(默认启用)类似但不全相同。<br>
-`-f`：对`TCP`套接字启用`TCP_FASTOPEN`选项，此特性在`Linux 3.7+`才有，若要`TFO`生效，还需配置`net.ipv4.tcp_fastopen`。
+`-a`：对`TCP`套接字设置`TCP_QUICKACK`选项，此选项在`Linux 2.4.4+`才有，和`TCP_NODELAY`(默认启用)类似但不完全相同。<br>
+`-f`：对`TCP`套接字启用`TCP_FASTOPEN`选项，此特性在`Linux 3.7+`才有，若要`TFO`生效，需配置`net.ipv4.tcp_fastopen`。
 
 Enjoy it!
