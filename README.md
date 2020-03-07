@@ -7,7 +7,7 @@ git clone https://github.com/zfl9/dns2tcp
 cd dns2tcp
 make && sudo make install
 ```
-dns2tcp 默认安装到 `/usr/local/bin/dns2tcp`，可安装到其它目录，如 `make install DESTDIR=/opt/local/bin`。
+dns2tcp 默认安装到 `/usr/local/bin/dns2tcp`，可安装到其它目录，如 `make install DESTDIR=/opt/local/bin`。<br>
 交叉编译时只需指定 CC 变量，如 `make CC=aarch64-linux-gnu-gcc`（如果报错，请先执行 `make clean`，然后再试）。
 
 ## 如何运行
