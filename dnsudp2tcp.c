@@ -353,17 +353,17 @@ int main(int argc, char *argv[]) {
 
     g_udp_sockfd = socket(g_listen_skaddr.sin6_family, SOCK_DGRAM, 0);
     if (g_udp_sockfd < 0) {
-        LOGERR("[main] create udp socket failed: (%d) %s", errno, strerror(errno));
+        LOGERR("[main] create udp socket: (%d) %s", errno, strerror(errno));
         return errno;
     }
 
     set_nonblock(g_udp_sockfd);
     set_reuseaddr(g_udp_sockfd);
     if (g_options & OPT_REUSE_PORT) set_reuseport(g_udp_sockfd);
-    if (g_options & OPT_IPV6_V6ONLY) set_ipv6only(g_udp_sockfd);
+    if ((g_options & OPT_IPV6_V6ONLY) && g_listen_skaddr.sin6_family == AF_INET6) set_ipv6only(g_udp_sockfd);
 
     if (bind(g_udp_sockfd, (void *)&g_listen_skaddr, g_listen_skaddr.sin6_family == AF_INET ? sizeof(skaddr4_t) : sizeof(skaddr6_t)) < 0) {
-        LOGERR("[main] bind udp address failed: (%d) %s", errno, strerror(errno));
+        LOGERR("[main] bind udp address: (%d) %s", errno, strerror(errno));
         return errno;
     }
 
