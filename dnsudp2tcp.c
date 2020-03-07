@@ -171,6 +171,13 @@ static void build_sock_addr6(skaddr6_t *addr, const char *ipstr, portno_t portno
     inet_pton(AF_INET6, ipstr, &addr->sin6_addr);
     addr->sin6_port = htons(portno);
 }
+static void build_sock_addr(unsigned ipfamily, void *addr, const char *ipstr, portno_t portno) {
+    if (ipfamily == AF_INET) {
+        build_sock_addr4(addr, ipstr, portno);
+    } else {
+        build_sock_addr6(addr, ipstr, portno);
+    }
+}
 
 static void parse_sock_addr4(const skaddr4_t *addr, char *ipstr, portno_t *portno) {
     inet_ntop(AF_INET, &addr->sin_addr, ipstr, IP4STRLEN);
@@ -209,11 +216,15 @@ static void parse_address_opt(char *ip_port_str, bool is_listen_addr) {
 
     char *portstr = strchr(ip_port_str, '#');
     if (!portstr) {
-        printf("[parse_address_opt] %s port is not specified\n", opt_name);
+        printf("[parse_address_opt] %s port not provided\n", opt_name);
         goto PRINT_HELP_AND_EXIT;
     }
     if (portstr == ip_port_str) {
-        printf("[parse_address_opt] %s addr is not specified\n", opt_name);
+        printf("[parse_address_opt] %s addr not provided\n", opt_name);
+        goto PRINT_HELP_AND_EXIT;
+    }
+    if (portstr == ip_port_str + strlen(ip_port_str) - 1) {
+        printf("[parse_address_opt] %s port not provided\n", opt_name);
         goto PRINT_HELP_AND_EXIT;
     }
 
@@ -228,7 +239,7 @@ static void parse_address_opt(char *ip_port_str, bool is_listen_addr) {
         goto PRINT_HELP_AND_EXIT;
     }
 
-    char *ipstr = ip_port_str;
+    const char *ipstr = ip_port_str;
     if (strlen(ipstr) + 1 > IP6STRLEN) {
         printf("[parse_address_opt] %s addr is invalid: %s\n", opt_name, ipstr);
         goto PRINT_HELP_AND_EXIT;
@@ -239,19 +250,14 @@ static void parse_address_opt(char *ip_port_str, bool is_listen_addr) {
         goto PRINT_HELP_AND_EXIT;
     }
 
-    void *skaddr_ptr = is_listen_addr ? &g_listen_skaddr : &g_remote_skaddr;
-    if (ipfamily == AF_INET) {
-        build_sock_addr4(skaddr_ptr, ipstr, portno);
-    } else {
-        build_sock_addr6(skaddr_ptr, ipstr, portno);
-    }
-
     if (is_listen_addr) {
         strcpy(g_listen_ipstr, ipstr);
         g_listen_portno = portno;
+        build_sock_addr(ipfamily, &g_listen_skaddr, ipstr, portno);
     } else {
         strcpy(g_remote_ipstr, ipstr);
         g_remote_portno = portno;
+        build_sock_addr(ipfamily, &g_remote_skaddr, ipstr, portno);
     }
     return;
 
