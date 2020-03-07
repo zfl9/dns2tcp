@@ -81,8 +81,7 @@ enum {
 static bool       g_verbose                 = false;
 static uint8_t    g_options                 = 0;
 static uint8_t    g_syn_maxcnt              = 0;
-static evloop_t  *g_event_loop              = NULL;
-static evio_t     g_udp_watcher             = {0};
+static int        g_udp_sockfd              = -1;
 static char       g_listen_ipstr[IP6STRLEN] = {0};
 static portno_t   g_listen_portno           = 0;
 static skaddr6_t  g_listen_skaddr           = {0};
@@ -354,29 +353,28 @@ int main(int argc, char *argv[]) {
     if (g_options & OPT_FAST_OPEN) LOGINF("[main] enable TCP_FASTOPEN sockopt");
     IF_VERBOSE LOGINF("[main] verbose mode, affect performance");
 
-    g_event_loop = ev_default_loop(0);
-
-    int sockfd = socket(g_listen_skaddr.sin6_family, SOCK_DGRAM, 0);
-    if (sockfd < 0) {
+    g_udp_sockfd = socket(g_listen_skaddr.sin6_family, SOCK_DGRAM, 0);
+    if (g_udp_sockfd < 0) {
         LOGERR("[main] create udp socket failed: (%d) %s", errno, strerror(errno));
         return errno;
     }
 
-    set_nonblock(sockfd);
-    set_reuseaddr(sockfd);
-    if (g_options & OPT_REUSE_PORT) set_reuseport(sockfd);
-    if (g_options & OPT_IPV6_V6ONLY) set_ipv6only(sockfd);
+    set_nonblock(g_udp_sockfd);
+    set_reuseaddr(g_udp_sockfd);
+    if (g_options & OPT_REUSE_PORT) set_reuseport(g_udp_sockfd);
+    if (g_options & OPT_IPV6_V6ONLY) set_ipv6only(g_udp_sockfd);
 
-    if (bind(sockfd, (void *)&g_listen_skaddr, g_listen_skaddr.sin6_family == AF_INET ? sizeof(skaddr4_t) : sizeof(skaddr6_t)) < 0) {
+    if (bind(g_udp_sockfd, (void *)&g_listen_skaddr, g_listen_skaddr.sin6_family == AF_INET ? sizeof(skaddr4_t) : sizeof(skaddr6_t)) < 0) {
         LOGERR("[main] bind udp address failed: (%d) %s", errno, strerror(errno));
         return errno;
     }
 
-    evio_t *udp_watcher = &g_udp_watcher; /* suppress warning */
-    ev_io_init(udp_watcher, udp_recvmsg_cb, sockfd, EV_READ);
-    ev_io_start(g_event_loop, udp_watcher);
+    evloop_t *evloop = ev_default_loop(0);
+    evio_t *watcher = &(evio_t){0};
+    ev_io_init(watcher, udp_recvmsg_cb, g_udp_sockfd, EV_READ);
+    ev_io_start(evloop, watcher);
 
-    ev_run(g_event_loop, 0);
+    ev_run(evloop, 0);
     return 0;
 }
 
@@ -491,7 +489,7 @@ static void tcp_recvmsg_cb(evloop_t *evloop, evio_t *watcher, int events __attri
     IF_VERBOSE LOGINF("[tcp_recvmsg_cb] recv from %s#%hu, nrecv:%zd", g_remote_ipstr, g_remote_portno, nrecv); 
     if (tcpw->nrcvsnd < 2 || tcpw->nrcvsnd < 2 + ntohs(*(uint16_t *)buffer)) return;
 
-    ssize_t nsend = sendto(g_udp_watcher.fd, buffer + 2, ntohs(*(uint16_t *)buffer), 0, (void *)&tcpw->srcaddr, sizeof(tcpw->srcaddr));
+    ssize_t nsend = sendto(g_udp_sockfd, buffer + 2, ntohs(*(uint16_t *)buffer), 0, (void *)&tcpw->srcaddr, sizeof(tcpw->srcaddr));
     if (nsend < 0) {
         portno_t portno;
         parse_sock_addr(&tcpw->srcaddr, g_ipstr_buf, &portno);
