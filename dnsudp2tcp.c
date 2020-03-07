@@ -428,6 +428,7 @@ static void udp_recvmsg_cb(evloop_t *evloop, evio_t *watcher __attribute__((unus
     }
 
     if (skip_connect && tcpw->nrcvsnd >= nrecv) {
+        tcpw->nrcvsnd = 0; /* reset to zero for recv data */
         ev_io_init((evio_t *)tcpw, tcp_recvmsg_cb, sockfd, EV_READ);
     } else {
         ev_io_init((evio_t *)tcpw, skip_connect ? tcp_sendmsg_cb : tcp_connect_cb, sockfd, EV_WRITE);
@@ -443,13 +444,13 @@ FREE_TCP_WATCHER:
 
 static void tcp_connect_cb(evloop_t *evloop, evio_t *watcher, int events __attribute__((unused))) {
     if (getsockopt(watcher->fd, SOL_SOCKET, SO_ERROR, &errno, &(socklen_t){sizeof(errno)}) < 0 || errno) {
-        LOGERR("[tcp_connect_cb] connect to %s#%hu failed: (%d) %s", g_remote_ipstr, g_remote_portno, errno, strerror(errno));
+        LOGERR("[tcp_connect_cb] connect to %s#%hu: (%d) %s", g_remote_ipstr, g_remote_portno, errno, strerror(errno));
         ev_io_stop(evloop, watcher);
         close(watcher->fd);
         free(watcher);
         return;
     }
-    IF_VERBOSE LOGINF("[tcp_connect_cb] connect to %s#%hu success", g_remote_ipstr, g_remote_portno);
+    IF_VERBOSE LOGINF("[tcp_connect_cb] connected to %s#%hu", g_remote_ipstr, g_remote_portno);
     ev_set_cb(watcher, tcp_sendmsg_cb);
     ev_invoke(evloop, watcher, EV_WRITE);
 }
