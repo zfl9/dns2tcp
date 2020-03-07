@@ -24,7 +24,7 @@ clean:
 $(MAIN): $(EVOBJFILE) $(OBJS)
 	$(CC) $(CFLAGS) -s -o $(MAIN) $(OBJS) $(EVOBJFILE) $(LIBS)
 
-%.o: %.c
+.c.o:
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(EVOBJFILE): $(EVSRCFILE)
