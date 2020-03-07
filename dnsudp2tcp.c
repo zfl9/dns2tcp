@@ -457,11 +457,11 @@ static void tcp_connect_cb(evloop_t *evloop, evio_t *watcher, int events __attri
 
 static void tcp_sendmsg_cb(evloop_t *evloop, evio_t *watcher, int events __attribute__((unused))) {
     tcpwatcher_t *tcpw = (void *)watcher;
-    void *buffer = tcpw->buffer;
-    uint16_t bufferlen = 2 + ntohs(*(uint16_t *)buffer);
-    ssize_t nsend = send(watcher->fd, buffer + tcpw->nrcvsnd, bufferlen - tcpw->nrcvsnd, 0);
-    if (nsend < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
-        LOGERR("[tcp_sendmsg_cb] send to %s#%hu failed: (%d) %s", g_remote_ipstr, g_remote_portno, errno, strerror(errno));
+    uint16_t datalen = 2 + ntohs(*(uint16_t *)tcpw->buffer);
+    ssize_t nsend = send(watcher->fd, (void *)tcpw->buffer + tcpw->nrcvsnd, datalen - tcpw->nrcvsnd, 0);
+    if (nsend < 0) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK) return;
+        LOGERR("[tcp_sendmsg_cb] send to %s#%hu: (%d) %s", g_remote_ipstr, g_remote_portno, errno, strerror(errno));
         ev_io_stop(evloop, watcher);
         close(watcher->fd);
         free(watcher);
@@ -469,8 +469,8 @@ static void tcp_sendmsg_cb(evloop_t *evloop, evio_t *watcher, int events __attri
     }
     IF_VERBOSE LOGINF("[tcp_sendmsg_cb] send to %s#%hu, nsend:%zd", g_remote_ipstr, g_remote_portno, nsend);
     tcpw->nrcvsnd += nsend;
-    if (tcpw->nrcvsnd >= bufferlen) {
-        tcpw->nrcvsnd = 0;
+    if (tcpw->nrcvsnd >= datalen) {
+        tcpw->nrcvsnd = 0; /* reset to zero for recv data */
         ev_io_stop(evloop, watcher);
         ev_io_init(watcher, tcp_recvmsg_cb, watcher->fd, EV_READ);
         ev_io_start(evloop, watcher);
@@ -482,8 +482,13 @@ static void tcp_recvmsg_cb(evloop_t *evloop, evio_t *watcher, int events __attri
     void *buffer = tcpw->buffer;
 
     ssize_t nrecv = recv(watcher->fd, buffer + tcpw->nrcvsnd, 2 + UDPDGRAM_MAXSIZ - tcpw->nrcvsnd, 0);
-    if (nrecv < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
-        LOGERR("[tcp_recvmsg_cb] recv from %s#%hu failed: (%d) %s", g_remote_ipstr, g_remote_portno, errno, strerror(errno));
+    if (nrecv < 0) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK) return;
+        LOGERR("[tcp_recvmsg_cb] recv from %s#%hu: (%d) %s", g_remote_ipstr, g_remote_portno, errno, strerror(errno));
+        goto FREE_TCP_WATCHER;
+    }
+    if (nrecv == 0) {
+        LOGERR("[tcp_recvmsg_cb] recv from %s#%hu: connection is closed", g_remote_ipstr, g_remote_portno);
         goto FREE_TCP_WATCHER;
     }
     tcpw->nrcvsnd += nrecv;
