@@ -33,10 +33,10 @@ usage: dns2tcp <-L listen> <-R remote> [-s syncnt] [-6rafvVh]
  -h                      print help information of dns2tcp and exit
 bug report: https://github.com/zfl9/dns2tcp. email: zfl9.com@gmail.com
 ```
-- -s：对 TCP 套接字设置 TCP_SYNCNT 选项，其值将影响 TCP 连接超时时间，但注意改值并不直接等于超时时间，具体请谷歌。
-- -6：对 UDP 套接字设置 IPV6_V6ONLY 选项，该选项与 `IPv4-mapped IPv6 address` 有关系，具体也不解释了，具体请谷歌。
-- -r：对 UDP 套接字设置 SO_REUSEPORT 选项，此选项在 Linux 3.9+ 才有（打过相应内核补丁的除外），用于多进程负载均衡。
-- -a：对 TCP 套接字设置 TCP_QUICKACK 选项，此选项在 Linux 2.4.4+ 才有，此选项和 TCP_NODELAY(默认启用) 类似但不全相同。
-- -f：对 TCP 套接字启用 TCP_FASTOPEN 选项，TFO 特性在 Linux 3.7+ 才有，若要 TFO 生效，还请留意 `net.ipv4.tcp_fastopen`。
+`-s`：对 TCP 套接字设置 TCP_SYNCNT 选项，其值将影响 TCP 连接超时时间，但注意改值并不直接等于超时时间，具体请谷歌。<br>
+`-6`：对 UDP 套接字设置 IPV6_V6ONLY 选项，该选项与 `IPv4-mapped IPv6 address` 有关系，具体也不解释了，具体请谷歌。<br>
+`-r`：对 UDP 套接字设置 SO_REUSEPORT 选项，此选项在 Linux 3.9+ 才有（打过相应内核补丁的除外），用于多进程负载均衡。<br>
+`-a`：对 TCP 套接字设置 TCP_QUICKACK 选项，此选项在 Linux 2.4.4+ 才有，此选项和 TCP_NODELAY(默认启用) 类似但不全相同。<br>
+`-f`：对 TCP 套接字启用 TCP_FASTOPEN 选项，TFO 特性在 Linux 3.7+ 才有，若要 TFO 生效，还请留意 `net.ipv4.tcp_fastopen`。
 
 Enjoy it!
