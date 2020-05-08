@@ -12,6 +12,7 @@
 #include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include "libev/ev.h"
@@ -79,6 +80,7 @@ enum {
 };
 
 static bool       g_verbose                 = false;
+static bool       g_daemonize               = false;
 static uint8_t    g_options                 = 0;
 static uint8_t    g_syn_maxcnt              = 0;
 static int        g_udp_sockfd              = -1;
@@ -199,6 +201,7 @@ static void print_command_help(void) {
            " -v                      print verbose log, default: <disabled>\n"
            " -V                      print version number of dns2tcp and exit\n"
            " -h                      print help information of dns2tcp and exit\n"
+           " -d                      fork into the background\n"
            "bug report: https://github.com/zfl9/dns2tcp. email: zfl9.com@gmail.com\n"
     );
 }
@@ -264,7 +267,7 @@ static void parse_command_args(int argc, char *argv[]) {
 
     opterr = 0;
     int shortopt = -1;
-    const char *optstr = "L:R:s:6rafvVh";
+    const char *optstr = "L:R:s:6rafvVhd";
     while ((shortopt = getopt(argc, argv, optstr)) != -1) {
         switch (shortopt) {
             case 'L':
@@ -309,6 +312,9 @@ static void parse_command_args(int argc, char *argv[]) {
             case 'h':
                 print_command_help();
                 exit(0);
+            case 'd':
+                g_daemonize = true;
+                break;
             case '?':
                 if (!strchr(optstr, optopt)) {
                     printf("[parse_command_args] unknown option '-%c'\n", optopt);
@@ -337,10 +343,68 @@ PRINT_HELP_AND_EXIT:
     exit(1);
 }
 
+void daemonize()
+{
+    // https://github.com/shadowsocks/shadowsocks-libev/blob/master/src/utils.c
+    /* Our process ID and Session ID */
+    pid_t pid, sid;
+
+    /* Fork off the parent process */
+    pid = fork();
+    if (pid < 0) {
+        LOGINF("daemonize failed");
+        exit(1);
+    }
+
+    /* If we got a good PID, then
+     * we can exit the parent process. */
+    if (pid > 0) {
+        LOGINF("daemonize ok, pid=%d", pid);
+        exit(0);
+    }
+
+    /* Change the file mode mask */
+    umask(0);
+
+    /* Open any logs here */
+
+    /* Create a new SID for the child process */
+    sid = setsid();
+    if (sid < 0) {
+        /* Log the failure */
+        exit(1);
+    }
+
+    /* Change the current working directory */
+    if ((chdir("/")) < 0) {
+        /* Log the failure */
+        exit(1);
+    }
+
+    int dev_null = open("/dev/null", O_WRONLY);
+    if (dev_null) {
+        /* Redirect to null device  */
+        dup2(dev_null, STDOUT_FILENO);
+        dup2(dev_null, STDERR_FILENO);
+    } else {
+        /* Close the standard file descriptors */
+        close(STDOUT_FILENO);
+        close(STDERR_FILENO);
+    }
+
+    /* Close the standard file descriptors */
+    close(STDIN_FILENO);
+}
+
 int main(int argc, char *argv[]) {
+    parse_command_args(argc, argv);
+
+    if (g_daemonize)
+        daemonize();
+
     signal(SIGPIPE, SIG_IGN);
     setvbuf(stdout, NULL, _IOLBF, 256);
-    parse_command_args(argc, argv);
+
 
     LOGINF("[main] udp listen addr: %s#%hu", g_listen_ipstr, g_listen_portno);
     LOGINF("[main] tcp remote addr: %s#%hu", g_remote_ipstr, g_remote_portno);
