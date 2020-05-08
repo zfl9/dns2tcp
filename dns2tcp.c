@@ -359,7 +359,7 @@ void daemonize()
     /* If we got a good PID, then
      * we can exit the parent process. */
     if (pid > 0) {
-        LOGINF("daemonize ok, pid=%d", pid);
+        LOGINF("daemonize ok, pid=%d", (int) pid);
         exit(0);
     }
 
