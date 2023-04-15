@@ -26,10 +26,24 @@ dns2tcp 默认安装到 `/usr/local/bin/dns2tcp`，可安装到其它目录，�
 # sh/bash 可以不加引号，zsh 必须加引号，防止#被转义
 # 好吧，这里我偷了下懒，端口号是必须指定的，即使是 53
 dns2tcp -L "127.0.0.1#5353" -R "8.8.8.8#53"
+
+# 如果想在后台运行，可以这样做：
+(dns2tcp -L "127.0.0.1#5353" -R "8.8.8.8#53" </dev/null &>>/var/log/dns2tcp.log &)
 ```
 
 - `-L` 选项指定本地监听地址，该监听地址接受 UDP 协议的 DNS 查询。
 - `-R` 选项指定远程 DNS 服务器地址，该 DNS 服务器应支持 TCP 查询。
+
+## 小技巧
+
+借助 iptables REDIRECT，将本机发往 8.8.8.8:53 的 UDP 查询请求，强行重定向至本机 dns2tcp 监听端口，这样就可以不用修改原有 dns 组件的配置，无感转换为 tcp 查询。还是上面那个例子，在启动 dns2tcp 之后，再执行如下 iptables 命令：
+
+```bash
+# 将目标地址为 8.8.8.8:53/udp 的包重定向至 dns2tcp 监听端口，实现透明 udp2tcp 转换
+iptables -t nat -A OUTPUT -p udp -d 8.8.8.8 --dport 53 -j REDIRECT --to-ports 5353
+```
+
+你可以在本机使用 `dig @8.8.8.8 baidu.com` 测试，观察 dns2tcp 日志（带上 -v），就会发现走 tcp 出去了。
 
 ## 全部参数
 
