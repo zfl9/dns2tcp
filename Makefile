@@ -6,7 +6,7 @@ OBJS = $(SRCS:.c=.o)
 MAIN = dns2tcp
 DESTDIR = /usr/local/bin
 
-EVCFLAGS = -w -O2
+EVCFLAGS = -O2 -fno-strict-aliasing
 EVSRCFILE = libev/ev.c
 EVOBJFILE = ev.o
 
