@@ -1,10 +1,14 @@
 # dns2tcp
 
-一个 DNS 实用工具，用于将 DNS 查询从 UDP 转为 TCP。当然 pdnsd、dnsforwarder 等工具也能实现该功能，但它们通常都有着较为繁杂的配置，而很多时候我们只是需要使用它们的 udp2tcp 功能而已，因此有了 `dns2tcp`。`dns2tcp` 设计的非常简洁以及易用，它不需要任何配置文件，直接在命令行参数中指定一个 **本地 UDP 监听地址** 以及一个 **远程 DNS 服务器地址**（该 DNS 服务器支持 TCP 查询）即可，没有任何多余的功能。
+一个 DNS 实用工具，用于将 DNS 查询从 UDP 转为 TCP。
+
+当然有很多 DNS 工具都可以实现这个功能，比如 pdnsd、dnsforwarder；但如果你只是想使用其 UDP 转 TCP 功能（比如配合 dnsmasq，将 dnsmasq 向上游发出的 DNS 查询从 UDP 转为 TCP），那么 dns2tcp 可能是更好的选择。
+
+`dns2tcp` 设计的非常简洁以及易用，它不需要任何配置文件，在命令行参数中指定一个 **本地 UDP 监听地址** 以及一个 **远程 DNS 服务器地址**（该 DNS 服务器支持 TCP 查询）即可，没有任何多余功能。
 
 ## 如何编译
 
-> 为了方便使用，[releases](https://github.com/zfl9/dns2tcp/releases) 页面发布了静态链接(musl)二进制。
+> 为了方便使用，[releases](https://github.com/zfl9/dns2tcp/releases) 页面发布了 linux 下常见架构的 musl 静态链接二进制。
 
 ```bash
 git clone https://github.com/zfl9/dns2tcp
