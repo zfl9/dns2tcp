@@ -39,14 +39,6 @@
 
 #include "config.h"
 
-#pragma GCC diagnostic ignored "-Wcomment"
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-#pragma GCC diagnostic ignored "-Wunused-variable"
-#pragma GCC diagnostic ignored "-Wunused-function"
-#ifdef __clang__
-#pragma GCC diagnostic ignored "-Wextern-initializer"
-#endif
-
 /* this big block deduces configuration from config.h */
 #ifndef EV_STANDALONE
 # ifdef EV_CONFIG_H

@@ -1,5 +1,14 @@
 #pragma once
 
+#pragma GCC diagnostic ignored "-Wcomment"
+#pragma GCC diagnostic ignored "-Wunused-function"
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#pragma GCC diagnostic ignored "-Wunused-variable"
+#pragma GCC diagnostic ignored "-Wunused-value"
+#ifdef __clang__
+#pragma GCC diagnostic ignored "-Wextern-initializer"
+#endif
+
 /* libev-4.33 */
 #define EV_STANDALONE 1 /* manual configuration */
 #define EV_COMPAT3 0 /* remove compatible code */
