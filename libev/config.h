@@ -36,6 +36,9 @@
 #define EV_USE_EVENTFD 0
 #define EV_USE_SIGNALFD 0
 
+#define EV_MINPRI 0
+#define EV_MAXPRI 0
+
 /* typedef struct */
 typedef struct ev_loop  evloop_t;
 typedef struct ev_io    evio_t;
