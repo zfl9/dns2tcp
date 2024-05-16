@@ -1,5 +1,4 @@
-#ifndef MY_LITE_H
-#define MY_LITE_H
+#pragma once
 
 /* libev-4.33 */
 #define EV_STANDALONE 1 /* manual configuration */
@@ -20,6 +19,23 @@
 #define EV_CLEANUP_ENABLE 0 /* disable ev_cleanup watcher */
 #define EV_ASYNC_ENABLE 0 /* disbale ev_async watcher */
 
+#define EV_USE_SELECT 0
+#define EV_USE_POLL 0
+#define EV_USE_EPOLL 1
+#define EV_USE_LINUXAIO 0
+#define EV_USE_IOURING 0
+#define EV_USE_KQUEUE 0
+#define EV_USE_PORT 0
+#define EV_USE_INOTIFY 0
+
+#define EV_USE_MONOTONIC 0
+#define EV_USE_REALTIME 0
+#define EV_USE_CLOCK_SYSCALL 0
+
+#define EV_USE_TIMERFD 0
+#define EV_USE_EVENTFD 0
+#define EV_USE_SIGNALFD 0
+
 /* typedef struct */
 typedef struct ev_loop  evloop_t;
 typedef struct ev_io    evio_t;
@@ -28,5 +44,3 @@ typedef struct ev_timer evtimer_t;
 /* typedef callback */
 typedef void (*evio_cb_t)(evloop_t *evloop, evio_t *watcher, int revents);
 typedef void (*evtimer_cb_t)(evloop_t *evloop, evtimer_t *watcher, int revents);
-
-#endif
