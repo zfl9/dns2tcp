@@ -48,7 +48,7 @@ iptables -t nat -A OUTPUT -p udp -d 8.8.8.8 --dport 53 -j REDIRECT --to-ports 53
 
 ## 全部参数
 
-```bash
+```console
 usage: dns2tcp <-L listen> <-R remote> [-s syncnt] [-6rvVh]
  -L <ip[#port]>          udp listen address, this is required
  -R <ip[#port]>          tcp remote address, this is required
