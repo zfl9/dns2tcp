@@ -9,7 +9,6 @@
 #include <errno.h>
 #include <signal.h>
 #include <unistd.h>
-#include <fcntl.h>
 #include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -31,9 +30,9 @@
   #define TCP_SYNCNT 7
 #endif
 
-#define IP4STRLEN INET_ADDRSTRLEN /* ipv4addr max strlen */
-#define IP6STRLEN INET6_ADDRSTRLEN /* ipv6addr max strlen */
-#define PORTSTRLEN 6 /* "65535", include the null character */
+#define IP4STRLEN INET_ADDRSTRLEN /* include \0 */
+#define IP6STRLEN INET6_ADDRSTRLEN /* include \0 */
+#define PORTSTRLEN 6 /* "65535" (include \0) */
 
 #define DNS_MSGSZ 1472 /* mtu:1500 - iphdr:20 - udphdr:8 */
 
@@ -123,8 +122,8 @@ static int get_ipstr_family(const char *ipstr) {
 /* ======================== context ======================== */
 
 typedef struct {
-    evio_t       watcher;
-    uint8_t      buffer[2 + DNS_MSGSZ] alignto(__alignof__(uint16_t)); /* msglen(be16) + msg */
+    evio_t       watcher; /* tcp watcher */
+    char         buffer[2 + DNS_MSGSZ] alignto(__alignof__(uint16_t)); /* msglen(be16) + msg */
     uint16_t     nbytes; /* nrecv or nsend */
     union skaddr srcaddr;
 } ctx_t;
@@ -218,7 +217,7 @@ static void parse_opt(int argc, char *argv[]) {
     char opt_remote_addr[IP6STRLEN + PORTSTRLEN] = {0};
 
     opterr = 0;
-    int shortopt = -1;
+    int shortopt;
     const char *optstr = "L:R:s:6rafvVh";
     while ((shortopt = getopt(argc, argv, optstr)) != -1) {
         switch (shortopt) {
@@ -368,21 +367,23 @@ int main(int argc, char *argv[]) {
 
 static void udp_recvmsg_cb(evloop_t *evloop, evio_t *watcher __unused, int events __unused) {
     ctx_t *ctx = malloc(sizeof(*ctx));
+
     ssize_t nrecv = recvfrom(g_udp_sockfd, (void *)ctx->buffer + 2, DNS_MSGSZ, 0, &ctx->srcaddr.sa, &(socklen_t){sizeof(ctx->srcaddr)});
     if (nrecv < 0) {
         if (errno != EAGAIN && errno != EWOULDBLOCK)
             log_warning("recv from udp socket: %m");
         goto free_ctx;
     }
+
     if (verbose()) {
         char ip[IP6STRLEN];
         uint16_t port;
         skaddr_to_text(&ctx->srcaddr, ip, &port);
         log_info("recv from %s#%hu, nrecv:%zd", ip, port, nrecv);
     }
+
     uint16_t *p_msglen = (void *)ctx->buffer;
     *p_msglen = htons(nrecv); /* msg length */
-    nrecv += 2; /* msglen + msgbuf */
 
     int sockfd = create_socket(skaddr_family(&g_remote_skaddr), SOCK_STREAM);
     if (sockfd < 0)
