@@ -223,14 +223,14 @@ static void parse_opt(int argc, char *argv[]) {
         switch (shortopt) {
             case 'L':
                 if (strlen(optarg) + 1 > IP6STRLEN + PORTSTRLEN) {
-                    printf("[parse_opt] invalid listen addr: %s\n", optarg);
+                    printf("invalid listen addr: %s\n", optarg);
                     goto err;
                 }
                 strcpy(opt_listen_addr, optarg);
                 break;
             case 'R':
                 if (strlen(optarg) + 1 > IP6STRLEN + PORTSTRLEN) {
-                    printf("[parse_opt] invalid remote addr: %s\n", optarg);
+                    printf("invalid remote addr: %s\n", optarg);
                     goto err;
                 }
                 strcpy(opt_remote_addr, optarg);
@@ -238,7 +238,7 @@ static void parse_opt(int argc, char *argv[]) {
             case 's':
                 g_syn_maxcnt = strtoul(optarg, NULL, 10);
                 if (g_syn_maxcnt == 0) {
-                    printf("[parse_opt] invalid tcp syn cnt: %s\n", optarg);
+                    printf("invalid tcp syn cnt: %s\n", optarg);
                     goto err;
                 }
                 break;
@@ -265,20 +265,20 @@ static void parse_opt(int argc, char *argv[]) {
                 exit(0);
             case '?':
                 if (!strchr(optstr, optopt)) {
-                    printf("[parse_opt] unknown option '-%c'\n", optopt);
+                    printf("unknown option '-%c'\n", optopt);
                 } else {
-                    printf("[parse_opt] missing optval '-%c'\n", optopt);
+                    printf("missing optval '-%c'\n", optopt);
                 }
                 goto err;
         }
     }
 
     if (strlen(opt_listen_addr) == 0) {
-        printf("[parse_opt] missing option: '-L'\n");
+        printf("missing option: '-L'\n");
         goto err;
     }
     if (strlen(opt_remote_addr) == 0) {
-        printf("[parse_opt] missing option: '-R'\n");
+        printf("missing option: '-R'\n");
         goto err;
     }
 
