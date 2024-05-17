@@ -792,7 +792,6 @@ struct signalfd_siginfo
 
 #ifndef ECB_MEMORY_FENCE
   #if ECB_GCC_VERSION(2,5) || defined __INTEL_COMPILER || (__llvm__ && __GNUC__) || __SUNPRO_C >= 0x5110 || __SUNPRO_CC >= 0x5110
-    #define ECB_MEMORY_FENCE_RELAXED __asm__ __volatile__ ("" : : : "memory")
     #if __i386 || __i386__
       #define ECB_MEMORY_FENCE         __asm__ __volatile__ ("lock; orb $0, -1(%%esp)" : : : "memory")
       #define ECB_MEMORY_FENCE_ACQUIRE __asm__ __volatile__ (""                        : : : "memory")
@@ -810,6 +809,7 @@ struct signalfd_siginfo
       || defined __ARM_ARCH_5T__ || defined __ARM_ARCH_5TE__ \
       || defined __ARM_ARCH_5TEJ__
       /* should not need any, unless running old code on newer cpu - arm doesn't support that */
+      #define ECB_MEMORY_FENCE do { } while (0)
     #elif defined __ARM_ARCH_6__  || defined __ARM_ARCH_6J__  \
        || defined __ARM_ARCH_6K__ || defined __ARM_ARCH_6ZK__ \
        || defined __ARM_ARCH_6T2__
@@ -852,14 +852,12 @@ struct signalfd_siginfo
     #define ECB_MEMORY_FENCE         __atomic_thread_fence (__ATOMIC_SEQ_CST)
     #define ECB_MEMORY_FENCE_ACQUIRE __atomic_thread_fence (__ATOMIC_ACQUIRE)
     #define ECB_MEMORY_FENCE_RELEASE __atomic_thread_fence (__ATOMIC_RELEASE)
-    #define ECB_MEMORY_FENCE_RELAXED __atomic_thread_fence (__ATOMIC_RELAXED)
 
   #elif ECB_CLANG_EXTENSION(c_atomic)
     /* see comment below (stdatomic.h) about the C11 memory model. */
     #define ECB_MEMORY_FENCE         __c11_atomic_thread_fence (__ATOMIC_SEQ_CST)
     #define ECB_MEMORY_FENCE_ACQUIRE __c11_atomic_thread_fence (__ATOMIC_ACQUIRE)
     #define ECB_MEMORY_FENCE_RELEASE __c11_atomic_thread_fence (__ATOMIC_RELEASE)
-    #define ECB_MEMORY_FENCE_RELAXED __c11_atomic_thread_fence (__ATOMIC_RELAXED)
 
   #elif ECB_GCC_VERSION(4,4) || defined __INTEL_COMPILER || defined __clang__
     #define ECB_MEMORY_FENCE         __sync_synchronize ()
@@ -882,7 +880,6 @@ struct signalfd_siginfo
     #define ECB_MEMORY_FENCE         __machine_rw_barrier  ()
     #define ECB_MEMORY_FENCE_ACQUIRE __machine_acq_barrier ()
     #define ECB_MEMORY_FENCE_RELEASE __machine_rel_barrier ()
-    #define ECB_MEMORY_FENCE_RELAXED __compiler_barrier ()
   #elif __xlC__
     #define ECB_MEMORY_FENCE         __sync ()
   #endif
@@ -923,10 +920,6 @@ struct signalfd_siginfo
 
 #if !defined ECB_MEMORY_FENCE_RELEASE && defined ECB_MEMORY_FENCE
   #define ECB_MEMORY_FENCE_RELEASE ECB_MEMORY_FENCE
-#endif
-
-#if !defined ECB_MEMORY_FENCE_RELAXED && defined ECB_MEMORY_FENCE
-  #define ECB_MEMORY_FENCE_RELAXED ECB_MEMORY_FENCE /* very heavy-handed */
 #endif
 
 /*****************************************************************************/
