@@ -17,7 +17,7 @@
 #include <netinet/tcp.h>
 #include "libev/ev.h"
 
-#define DNS2TCP_VER "dns2tcp v1.1.0"
+#define DNS2TCP_VER "dns2tcp v1.1.1"
 
 #ifndef IPV6_V6ONLY
   #define IPV6_V6ONLY 26
@@ -37,7 +37,18 @@
 
 #define DNS_MSGSZ 1472 /* mtu:1500 - iphdr:20 - udphdr:8 */
 
-/* ======================== log func ======================== */
+/* ======================== helper ======================== */
+
+#define __unused __attribute__((unused))
+
+#define alignto(alignment) __attribute__((aligned(alignment)))
+
+// get the struct pointer by the field(member) pointer
+#define container_of(p_field, struct_type, field_name) ( \
+    (struct_type *) ((void *)(p_field) - offsetof(struct_type, field_name)) \
+)
+
+/* ======================== log-func ======================== */
 
 #define log_write(color, level, fmt, args...) ({ \
     time_t t_ = time(NULL); \
@@ -62,7 +73,7 @@
 #define log_error(fmt, args...) \
     log_write("35", "E", fmt, ##args)
 
-/* ======================== socket addr ======================== */
+/* ======================== socket-addr ======================== */
 
 union skaddr {
     struct sockaddr sa;
@@ -111,13 +122,6 @@ static int get_ipstr_family(const char *ipstr) {
 
 /* ======================== context ======================== */
 
-#define alignto(alignment) __attribute__((aligned(alignment)))
-
-// get the struct pointer by the field(member) pointer
-#define container_of(p_field, struct_type, field_name) ( \
-    (struct_type *) ((void *)(p_field) - offsetof(struct_type, field_name)) \
-)
-
 typedef struct {
     evio_t       watcher;
     uint8_t      buffer[2 + DNS_MSGSZ] alignto(__alignof__(uint16_t)); /* msglen(be16) + msg */
@@ -125,7 +129,7 @@ typedef struct {
     union skaddr srcaddr;
 } ctx_t;
 
-/* ======================== global vars ======================== */
+/* ======================== global-vars ======================== */
 
 enum {
     OPT_IPV6_V6ONLY = 1 << 0,
@@ -362,12 +366,12 @@ int main(int argc, char *argv[]) {
     return ev_run(evloop, 0);
 }
 
-static void udp_recvmsg_cb(evloop_t *evloop, evio_t *watcher __attribute__((unused)), int events __attribute__((unused))) {
+static void udp_recvmsg_cb(evloop_t *evloop, evio_t *watcher __unused, int events __unused) {
     ctx_t *ctx = malloc(sizeof(*ctx));
     ssize_t nrecv = recvfrom(g_udp_sockfd, (void *)ctx->buffer + 2, DNS_MSGSZ, 0, &ctx->srcaddr.sa, &(socklen_t){sizeof(ctx->srcaddr)});
     if (nrecv < 0) {
         if (errno != EAGAIN && errno != EWOULDBLOCK)
-            log_error("recv from udp socket: %m");
+            log_warning("recv from udp socket: %m");
         goto free_ctx;
     }
     if (verbose()) {
@@ -385,7 +389,7 @@ static void udp_recvmsg_cb(evloop_t *evloop, evio_t *watcher __attribute__((unus
         goto free_ctx;
 
     if (connect(sockfd, &g_remote_skaddr.sa, skaddr_len(&g_remote_skaddr)) < 0 && errno != EINPROGRESS) {
-        log_error("connect to %s#%hu: %m", g_remote_ipstr, g_remote_port);
+        log_warning("connect to %s#%hu: %m", g_remote_ipstr, g_remote_port);
         goto close_sockfd;
     }
     log_verbose("try to connect to %s#%hu", g_remote_ipstr, g_remote_port);
@@ -407,11 +411,11 @@ static void free_ctx(ctx_t *ctx, evloop_t *evloop) {
     free(ctx);
 }
 
-static void tcp_connect_cb(evloop_t *evloop, evio_t *watcher, int events __attribute__((unused))) {
+static void tcp_connect_cb(evloop_t *evloop, evio_t *watcher, int events __unused) {
     ctx_t *ctx = container_of(watcher, ctx_t, watcher);
 
     if (getsockopt(watcher->fd, SOL_SOCKET, SO_ERROR, &errno, &(socklen_t){sizeof(errno)}) < 0 || errno) {
-        log_error("connect to %s#%hu: %m", g_remote_ipstr, g_remote_port);
+        log_warning("connect to %s#%hu: %m", g_remote_ipstr, g_remote_port);
         free_ctx(ctx, evloop);
         return;
     }
@@ -422,7 +426,7 @@ static void tcp_connect_cb(evloop_t *evloop, evio_t *watcher, int events __attri
     ev_invoke(evloop, watcher, EV_WRITE);
 }
 
-static void tcp_sendmsg_cb(evloop_t *evloop, evio_t *watcher, int events __attribute__((unused))) {
+static void tcp_sendmsg_cb(evloop_t *evloop, evio_t *watcher, int events __unused) {
     ctx_t *ctx = container_of(watcher, ctx_t, watcher);
 
     uint16_t *p_msglen = (void *)ctx->buffer;
@@ -431,7 +435,7 @@ static void tcp_sendmsg_cb(evloop_t *evloop, evio_t *watcher, int events __attri
     ssize_t nsend = send(watcher->fd, (void *)ctx->buffer + ctx->nbytes, datalen - ctx->nbytes, 0);
     if (nsend < 0) {
         if (errno == EAGAIN || errno == EWOULDBLOCK) return;
-        log_error("send to %s#%hu: %m", g_remote_ipstr, g_remote_port);
+        log_warning("send to %s#%hu: %m", g_remote_ipstr, g_remote_port);
         free_ctx(ctx, evloop);
         return;
     }
@@ -446,7 +450,7 @@ static void tcp_sendmsg_cb(evloop_t *evloop, evio_t *watcher, int events __attri
     }
 }
 
-static void tcp_recvmsg_cb(evloop_t *evloop, evio_t *watcher, int events __attribute__((unused))) {
+static void tcp_recvmsg_cb(evloop_t *evloop, evio_t *watcher, int events __unused) {
     ctx_t *ctx = container_of(watcher, ctx_t, watcher);
 
     void *buffer = ctx->buffer;
@@ -454,11 +458,11 @@ static void tcp_recvmsg_cb(evloop_t *evloop, evio_t *watcher, int events __attri
     ssize_t nrecv = recv(watcher->fd, buffer + ctx->nbytes, 2 + DNS_MSGSZ - ctx->nbytes, 0);
     if (nrecv < 0) {
         if (errno == EAGAIN || errno == EWOULDBLOCK) return;
-        log_error("recv from %s#%hu: %m", g_remote_ipstr, g_remote_port);
+        log_warning("recv from %s#%hu: %m", g_remote_ipstr, g_remote_port);
         goto free_ctx;
     }
     if (nrecv == 0) {
-        log_error("recv from %s#%hu: connection is closed", g_remote_ipstr, g_remote_port);
+        log_warning("recv from %s#%hu: connection is closed", g_remote_ipstr, g_remote_port);
         goto free_ctx;
     }
     log_verbose("recv from %s#%hu, nrecv:%zd", g_remote_ipstr, g_remote_port, nrecv);
@@ -474,7 +478,7 @@ static void tcp_recvmsg_cb(evloop_t *evloop, evio_t *watcher, int events __attri
         uint16_t port;
         skaddr_to_text(&ctx->srcaddr, ip, &port);
         if (nsend < 0)
-            log_error("send to %s#%hu: %m", ip, port);
+            log_warning("send to %s#%hu: %m", ip, port);
         else
             log_info("send to %s#%hu, nsend:%zd", ip, port, nsend);
     }
