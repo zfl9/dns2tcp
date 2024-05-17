@@ -37,6 +37,33 @@
 
 #define DNS_MSGSZ 1472 /* mtu:1500 - iphdr:20 - udphdr:8 */
 
+/* ======================== log func ======================== */
+
+#define log_write(color, level, fmt, args...) ({ \
+    time_t t_ = time(NULL); \
+    const struct tm *tm_ = localtime(&t_); \
+    printf("\e[" color ";1m%d-%02d-%02d %02d:%02d:%02d " level "\e[0m " \
+        "\e[1m[%s]\e[0m " fmt "\n", \
+        tm_->tm_year + 1900, tm_->tm_mon + 1, tm_->tm_mday, \
+        tm_->tm_hour,        tm_->tm_min,     tm_->tm_sec, \
+        __func__, ##args); \
+})
+
+#define log_verbose(fmt, args...) ({ \
+    if (verbose()) log_info(fmt, ##args); \
+})
+
+#define log_info(fmt, args...) \
+    log_write("32", "I", fmt, ##args)
+
+#define log_warning(fmt, args...) \
+    log_write("33", "W", fmt, ##args)
+
+#define log_error(fmt, args...) \
+    log_write("35", "E", fmt, ##args)
+
+/* ======================== socket addr ======================== */
+
 union skaddr {
     struct sockaddr sa;
     struct sockaddr_in sin;
@@ -70,32 +97,26 @@ static void skaddr_to_text(const union skaddr *addr, char *ipstr, uint16_t *port
     }
 }
 
-#define log_verbose(fmt, ...) ({ \
-    if (verbose()) log_info(fmt, ##__VA_ARGS__); \
-})
+/* AF_INET, AF_INET6, -1(invalid) */
+static int get_ipstr_family(const char *ipstr) {
+    char tmp[16];
+    if (!ipstr)
+        return -1;
+    if (inet_pton(AF_INET, ipstr, &tmp) == 1)
+        return AF_INET;
+    if (inet_pton(AF_INET6, ipstr, &tmp) == 1)
+        return AF_INET6;
+    return -1;
+}
 
-#define log_info(fmt, ...)                                                    \
-    do {                                                                    \
-        struct tm *tm = localtime(&(time_t){time(NULL)});                   \
-        printf("\e[1;32m%04d-%02d-%02d %02d:%02d:%02d INF:\e[0m " fmt "\n", \
-                tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,            \
-                tm->tm_hour,        tm->tm_min,     tm->tm_sec,             \
-                ##__VA_ARGS__);                                             \
-    } while (0)
-
-#define log_error(fmt, ...)                                                    \
-    do {                                                                    \
-        struct tm *tm = localtime(&(time_t){time(NULL)});                   \
-        printf("\e[1;35m%04d-%02d-%02d %02d:%02d:%02d ERR:\e[0m " fmt "\n", \
-                tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,            \
-                tm->tm_hour,        tm->tm_min,     tm->tm_sec,             \
-                ##__VA_ARGS__);                                             \
-    } while (0)
+/* ======================== context ======================== */
 
 #define alignto(alignment) __attribute__((aligned(alignment)))
 
-#define container_of(p_field, struct_type, field_name) \
-    ( (struct_type *) ((void *)(p_field) - offsetof(struct_type, field_name)) )
+// get the struct pointer by the field(member) pointer
+#define container_of(p_field, struct_type, field_name) ( \
+    (struct_type *) ((void *)(p_field) - offsetof(struct_type, field_name)) \
+)
 
 typedef struct {
     evio_t       watcher;
@@ -103,6 +124,8 @@ typedef struct {
     uint16_t     nbytes; /* nrecv or nsend */
     union skaddr srcaddr;
 } ctx_t;
+
+/* ======================== global vars ======================== */
 
 enum {
     OPT_IPV6_V6ONLY = 1 << 0,
@@ -132,66 +155,10 @@ static void tcp_connect_cb(evloop_t *evloop, evio_t *watcher, int events);
 static void tcp_sendmsg_cb(evloop_t *evloop, evio_t *watcher, int events);
 static void tcp_recvmsg_cb(evloop_t *evloop, evio_t *watcher, int events);
 
-/* udp listen or tcp connect */
-static int create_socket(int family, int type) {
-    const char *err_op = NULL;
-
-    int fd = socket(family, type | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
-    if (fd < 0) {
-        err_op = "create_socket";
-        goto out;
-    }
-
-    const int opt = 1;
-    if (type == SOCK_DGRAM) {
-        // udp listen socket
-        if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
-            err_op = "set_reuseaddr";
-            goto out;
-        }
-        if (has_opt(OPT_REUSE_PORT) && setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt)) < 0) {
-            err_op = "set_reuseport";
-            goto out;
-        }
-        if (family == AF_INET6 && has_opt(OPT_IPV6_V6ONLY) && setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &opt, sizeof(opt)) < 0) {
-            err_op = "set_ipv6only";
-            goto out;
-        }
-    } else {
-        // tcp connect socket
-        if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt)) < 0) {
-            err_op = "set_tcp_nodelay";
-            goto out;
-        }
-        const int syn_maxcnt = g_syn_maxcnt;
-        if (syn_maxcnt && setsockopt(fd, IPPROTO_TCP, TCP_SYNCNT, &syn_maxcnt, sizeof(syn_maxcnt)) < 0) {
-            err_op = "set_tcp_syncnt";
-            goto out;
-        }
-    }
-
-out:
-    if (err_op)
-        log_error("[create_socket] %s(fd:%d, family:%d, type:%d) failed: %m", err_op, fd, family, type);
-    return fd;
-}
-
-/* AF_INET, AF_INET6, -1(invalid) */
-static int get_ipstr_family(const char *ipstr) {
-    char tmp[16];
-    if (!ipstr)
-        return -1;
-    if (inet_pton(AF_INET, ipstr, &tmp) == 1)
-        return AF_INET;
-    if (inet_pton(AF_INET6, ipstr, &tmp) == 1)
-        return AF_INET6;
-    return -1;
-}
-
 static void print_help(void) {
-    printf("usage: dns2tcp <-L listen> <-R remote> [-s syncnt] [-6rafvVh]\n"
-           " -L <ip#port>            udp listen address, this is required\n"
-           " -R <ip#port>            tcp remote address, this is required\n"
+    printf("usage: dns2tcp <-L listen> <-R remote> [-s syncnt] [-6rvVh]\n"
+           " -L <ip[#port]>          udp listen address, this is required\n"
+           " -R <ip[#port]>          tcp remote address, this is required\n"
            " -s <syncnt>             set TCP_SYNCNT(max) for remote socket\n"
            " -6                      enable IPV6_V6ONLY for listen socket\n"
            " -r                      enable SO_REUSEPORT for listen socket\n"
@@ -235,9 +202,9 @@ static void parse_addr(const char *addr, bool is_listen_addr) {
     }
     return;
 
-err:
+err:;
     const char *type = is_listen_addr ? "listen" : "remote";
-    printf("invalid %s address: '%s'", type, addr);
+    printf("invalid %s address: '%s'\n", type, addr);
     print_help();
     exit(1);
 }
@@ -321,24 +288,68 @@ err:
     exit(1);
 }
 
+/* udp listen or tcp connect */
+static int create_socket(int family, int type) {
+    const char *err_op = NULL;
+
+    int fd = socket(family, type | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
+    if (fd < 0) {
+        err_op = "create_socket";
+        goto out;
+    }
+
+    const int opt = 1;
+    if (type == SOCK_DGRAM) {
+        // udp listen socket
+        if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+            err_op = "set_reuseaddr";
+            goto out;
+        }
+        if (has_opt(OPT_REUSE_PORT) && setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt)) < 0) {
+            err_op = "set_reuseport";
+            goto out;
+        }
+        if (family == AF_INET6 && has_opt(OPT_IPV6_V6ONLY) && setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &opt, sizeof(opt)) < 0) {
+            err_op = "set_ipv6only";
+            goto out;
+        }
+    } else {
+        // tcp connect socket
+        if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt)) < 0) {
+            err_op = "set_tcp_nodelay";
+            goto out;
+        }
+        const int syn_maxcnt = g_syn_maxcnt;
+        if (syn_maxcnt && setsockopt(fd, IPPROTO_TCP, TCP_SYNCNT, &syn_maxcnt, sizeof(syn_maxcnt)) < 0) {
+            err_op = "set_tcp_syncnt";
+            goto out;
+        }
+    }
+
+out:
+    if (err_op)
+        log_error("%s(fd:%d, family:%d, type:%d) failed: %m", err_op, fd, family, type);
+    return fd;
+}
+
 int main(int argc, char *argv[]) {
     signal(SIGPIPE, SIG_IGN);
     setvbuf(stdout, NULL, _IOLBF, 256);
     parse_opt(argc, argv);
 
-    log_info("[main] udp listen addr: %s#%hu", g_listen_ipstr, g_listen_port);
-    log_info("[main] tcp remote addr: %s#%hu", g_remote_ipstr, g_remote_port);
-    if (g_syn_maxcnt) log_info("[main] enable TCP_SYNCNT:%hhu sockopt", g_syn_maxcnt);
-    if (has_opt(OPT_IPV6_V6ONLY)) log_info("[main] enable IPV6_V6ONLY sockopt");
-    if (has_opt(OPT_REUSE_PORT)) log_info("[main] enable SO_REUSEPORT sockopt");
-    log_verbose("[main] verbose mode, affect performance");
+    log_info("udp listen addr: %s#%hu", g_listen_ipstr, g_listen_port);
+    log_info("tcp remote addr: %s#%hu", g_remote_ipstr, g_remote_port);
+    if (g_syn_maxcnt) log_info("enable TCP_SYNCNT:%hhu sockopt", g_syn_maxcnt);
+    if (has_opt(OPT_IPV6_V6ONLY)) log_info("enable IPV6_V6ONLY sockopt");
+    if (has_opt(OPT_REUSE_PORT)) log_info("enable SO_REUSEPORT sockopt");
+    log_verbose("verbose mode, affect performance");
 
     g_udp_sockfd = create_socket(skaddr_family(&g_listen_skaddr), SOCK_DGRAM);
     if (g_udp_sockfd < 0)
         return 1;
 
     if (bind(g_udp_sockfd, &g_listen_skaddr.sa, skaddr_len(&g_listen_skaddr)) < 0) {
-        log_error("[main] bind udp address: %m");
+        log_error("bind udp address: %m");
         return 1;
     }
 
@@ -356,14 +367,14 @@ static void udp_recvmsg_cb(evloop_t *evloop, evio_t *watcher __attribute__((unus
     ssize_t nrecv = recvfrom(g_udp_sockfd, (void *)ctx->buffer + 2, DNS_MSGSZ, 0, &ctx->srcaddr.sa, &(socklen_t){sizeof(ctx->srcaddr)});
     if (nrecv < 0) {
         if (errno != EAGAIN && errno != EWOULDBLOCK)
-            log_error("[udp_recvmsg_cb] recv from udp socket: %m");
+            log_error("recv from udp socket: %m");
         goto free_ctx;
     }
     if (verbose()) {
         char ip[IP6STRLEN];
         uint16_t port;
         skaddr_to_text(&ctx->srcaddr, ip, &port);
-        log_info("[udp_recvmsg_cb] recv from %s#%hu, nrecv:%zd", ip, port, nrecv);
+        log_info("recv from %s#%hu, nrecv:%zd", ip, port, nrecv);
     }
     uint16_t *p_msglen = (void *)ctx->buffer;
     *p_msglen = htons(nrecv); /* msg length */
@@ -374,10 +385,10 @@ static void udp_recvmsg_cb(evloop_t *evloop, evio_t *watcher __attribute__((unus
         goto free_ctx;
 
     if (connect(sockfd, &g_remote_skaddr.sa, skaddr_len(&g_remote_skaddr)) < 0 && errno != EINPROGRESS) {
-        log_error("[udp_recvmsg_cb] connect to %s#%hu: %m", g_remote_ipstr, g_remote_port);
+        log_error("connect to %s#%hu: %m", g_remote_ipstr, g_remote_port);
         goto close_sockfd;
     }
-    log_verbose("[udp_recvmsg_cb] try to connect to %s#%hu", g_remote_ipstr, g_remote_port);
+    log_verbose("try to connect to %s#%hu", g_remote_ipstr, g_remote_port);
 
     ev_io_init(&ctx->watcher, tcp_connect_cb, sockfd, EV_WRITE);
     ev_io_start(evloop, &ctx->watcher);
@@ -400,11 +411,11 @@ static void tcp_connect_cb(evloop_t *evloop, evio_t *watcher, int events __attri
     ctx_t *ctx = container_of(watcher, ctx_t, watcher);
 
     if (getsockopt(watcher->fd, SOL_SOCKET, SO_ERROR, &errno, &(socklen_t){sizeof(errno)}) < 0 || errno) {
-        log_error("[tcp_connect_cb] connect to %s#%hu: %m", g_remote_ipstr, g_remote_port);
+        log_error("connect to %s#%hu: %m", g_remote_ipstr, g_remote_port);
         free_ctx(ctx, evloop);
         return;
     }
-    log_verbose("[tcp_connect_cb] connect to %s#%hu succeed", g_remote_ipstr, g_remote_port);
+    log_verbose("connect to %s#%hu succeed", g_remote_ipstr, g_remote_port);
 
     ctx->nbytes = 0;
     ev_set_cb(watcher, tcp_sendmsg_cb);
@@ -420,11 +431,11 @@ static void tcp_sendmsg_cb(evloop_t *evloop, evio_t *watcher, int events __attri
     ssize_t nsend = send(watcher->fd, (void *)ctx->buffer + ctx->nbytes, datalen - ctx->nbytes, 0);
     if (nsend < 0) {
         if (errno == EAGAIN || errno == EWOULDBLOCK) return;
-        log_error("[tcp_sendmsg_cb] send to %s#%hu: %m", g_remote_ipstr, g_remote_port);
+        log_error("send to %s#%hu: %m", g_remote_ipstr, g_remote_port);
         free_ctx(ctx, evloop);
         return;
     }
-    log_verbose("[tcp_sendmsg_cb] send to %s#%hu, nsend:%zd", g_remote_ipstr, g_remote_port, nsend);
+    log_verbose("send to %s#%hu, nsend:%zd", g_remote_ipstr, g_remote_port, nsend);
 
     ctx->nbytes += nsend;
     if (ctx->nbytes >= datalen) {
@@ -443,14 +454,14 @@ static void tcp_recvmsg_cb(evloop_t *evloop, evio_t *watcher, int events __attri
     ssize_t nrecv = recv(watcher->fd, buffer + ctx->nbytes, 2 + DNS_MSGSZ - ctx->nbytes, 0);
     if (nrecv < 0) {
         if (errno == EAGAIN || errno == EWOULDBLOCK) return;
-        log_error("[tcp_recvmsg_cb] recv from %s#%hu: %m", g_remote_ipstr, g_remote_port);
+        log_error("recv from %s#%hu: %m", g_remote_ipstr, g_remote_port);
         goto free_ctx;
     }
     if (nrecv == 0) {
-        log_error("[tcp_recvmsg_cb] recv from %s#%hu: connection is closed", g_remote_ipstr, g_remote_port);
+        log_error("recv from %s#%hu: connection is closed", g_remote_ipstr, g_remote_port);
         goto free_ctx;
     }
-    log_verbose("[tcp_recvmsg_cb] recv from %s#%hu, nrecv:%zd", g_remote_ipstr, g_remote_port, nrecv);
+    log_verbose("recv from %s#%hu, nrecv:%zd", g_remote_ipstr, g_remote_port, nrecv);
 
     ctx->nbytes += nrecv;
 
@@ -463,9 +474,9 @@ static void tcp_recvmsg_cb(evloop_t *evloop, evio_t *watcher, int events __attri
         uint16_t port;
         skaddr_to_text(&ctx->srcaddr, ip, &port);
         if (nsend < 0)
-            log_error("[tcp_recvmsg_cb] send to %s#%hu: %m", ip, port);
+            log_error("send to %s#%hu: %m", ip, port);
         else
-            log_info("[tcp_recvmsg_cb] send to %s#%hu, nsend:%zd", ip, port, nsend);
+            log_info("send to %s#%hu, nsend:%zd", ip, port, nsend);
     }
 
 free_ctx:
