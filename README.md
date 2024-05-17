@@ -25,6 +25,7 @@ dns2tcp 默认安装到 `/usr/local/bin/dns2tcp`，可安装到其它目录，�
 ```bash
 # sh/bash 可以不加引号，zsh 必须加引号，防止#被转义
 # 好吧，这里我偷了下懒，端口号是必须指定的，即使是 53
+# UPDATE: 从 v1.1.1 版本开始可以省略端口号，默认是 53
 dns2tcp -L "127.0.0.1#5353" -R "8.8.8.8#53"
 
 # 如果想在后台运行，可以这样做：
@@ -48,14 +49,12 @@ iptables -t nat -A OUTPUT -p udp -d 8.8.8.8 --dport 53 -j REDIRECT --to-ports 53
 ## 全部参数
 
 ```bash
-usage: dns2tcp <-L listen> <-R remote> [-s syncnt] [-6rafvVh]
- -L <ip#port>            udp listen address, this is required
- -R <ip#port>            tcp remote address, this is required
+usage: dns2tcp <-L listen> <-R remote> [-s syncnt] [-6rvVh]
+ -L <ip[#port]>          udp listen address, this is required
+ -R <ip[#port]>          tcp remote address, this is required
  -s <syncnt>             set TCP_SYNCNT(max) for remote socket
  -6                      enable IPV6_V6ONLY for listen socket
  -r                      enable SO_REUSEPORT for listen socket
- -a                      enable TCP_QUICKACK for remote socket
- -f                      enable TCP_FASTOPEN for remote socket
  -v                      print verbose log, default: <disabled>
  -V                      print version number of dns2tcp and exit
  -h                      print help information of dns2tcp and exit
@@ -67,7 +66,3 @@ bug report: https://github.com/zfl9/dns2tcp. email: zfl9.com@gmail.com
 `-6`：对`UDP`套接字设置`IPV6_V6ONLY`，建议始终启用，把 v4 和 v6 监听严格区分开。
 
 `-r`：对`UDP`套接字设置`SO_REUSEPORT`，用于多进程负载均衡，Linux 3.9+ 开始可用。
-
-`-a`：对`TCP`套接字设置`TCP_QUICKACK`，与`TCP_NODELAY`(默认启用)类似，详情可谷歌或man文档。
-
-`-f`：对`TCP`套接字设置`TCP_FASTOPEN`，用于客户端 TFO，别忘了配置内核参数`net.ipv4.tcp_fastopen`。
