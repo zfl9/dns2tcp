@@ -134,6 +134,7 @@ enum {
     OPT_IPV6_V6ONLY = 1 << 0,
     OPT_REUSE_PORT  = 1 << 1,
     OPT_VERBOSE     = 1 << 2,
+    OPT_BIND_TCP    = 1 << 4,
 };
 
 #define has_opt(opt) (g_options & (opt))
@@ -153,6 +154,10 @@ static char         g_remote_ipstr[IP6STRLEN] = {0};
 static uint16_t     g_remote_port             = 0;
 static union skaddr g_remote_skaddr           = {0};
 
+static char         g_bind_ipstr[IP6STRLEN] = {0};
+static uint16_t     g_bind_port             = 0;
+static union skaddr g_bind_skaddr           = {0};
+
 static void udp_recvmsg_cb(evloop_t *evloop, evio_t *watcher, int events);
 static void tcp_connect_cb(evloop_t *evloop, evio_t *watcher, int events);
 static void tcp_sendmsg_cb(evloop_t *evloop, evio_t *watcher, int events);
@@ -162,6 +167,7 @@ static void print_help(void) {
     printf("usage: dns2tcp <-L listen> <-R remote> [-s syncnt] [-6rvVh]\n"
            " -L <ip[#port]>          udp listen address, this is required\n"
            " -R <ip[#port]>          tcp remote address, this is required\n"
+	   " -B <ip>                 bind address for tcp connection\n"
            " -s <syncnt>             set TCP_SYNCNT(max) for remote socket\n"
            " -6                      enable IPV6_V6ONLY for listen socket\n"
            " -r                      enable SO_REUSEPORT for listen socket\n"
@@ -172,7 +178,7 @@ static void print_help(void) {
     );
 }
 
-static void parse_addr(const char *addr, bool is_listen_addr) {
+static void parse_addr(const char *addr, int addr_type) {
     const char *end = addr + strlen(addr);
     const char *sep = strchr(addr, '#') ?: end;
 
@@ -194,19 +200,39 @@ static void parse_addr(const char *addr, bool is_listen_addr) {
     uint16_t port = 53;
     if (portlen >= 0 && (port = strtoul(portstart, NULL, 10)) == 0) goto err;
 
-    if (is_listen_addr) {
+    if (addr_type == 0) {
         strcpy(g_listen_ipstr, ipstr);
         g_listen_port = port;
         skaddr_from_text(&g_listen_skaddr, family, ipstr, port);
-    } else {
+    } 
+    if (addr_type == 1) {
         strcpy(g_remote_ipstr, ipstr);
         g_remote_port = port;
         skaddr_from_text(&g_remote_skaddr, family, ipstr, port);
     }
+    if (addr_type == 2){
+        strcpy(g_bind_ipstr, ipstr);
+	port = 0;
+        g_bind_port = port;
+	if (portlen >= 0) log_info("Ignore port when binding address (set to zero)");
+        skaddr_from_text(&g_bind_skaddr, family, ipstr, port);
+    }
     return;
 
 err:;
-    const char *type = is_listen_addr ? "listen" : "remote";
+    const char *type;
+    switch (addr_type) {
+	    case 0:
+		    type = "listen";
+		    break;
+            case 1:
+		    type = "remote";
+		    break;
+	    case 2:
+		    type = "bind";
+		    break;
+    }
+
     printf("invalid %s address: '%s'\n", type, addr);
     print_help();
     exit(1);
@@ -215,10 +241,11 @@ err:;
 static void parse_opt(int argc, char *argv[]) {
     char opt_listen_addr[IP6STRLEN + PORTSTRLEN] = {0};
     char opt_remote_addr[IP6STRLEN + PORTSTRLEN] = {0};
+    char opt_bind_addr[IP6STRLEN + PORTSTRLEN] = {0};
 
     opterr = 0;
     int shortopt;
-    const char *optstr = "L:R:s:6rafvVh";
+    const char *optstr = "L:R:B:s:6rafvVh";
     while ((shortopt = getopt(argc, argv, optstr)) != -1) {
         switch (shortopt) {
             case 'L':
@@ -235,6 +262,14 @@ static void parse_opt(int argc, char *argv[]) {
                 }
                 strcpy(opt_remote_addr, optarg);
                 break;
+	    case 'B':
+		if (strlen(optarg) + 1 > IP6STRLEN + PORTSTRLEN) {
+                    printf("invalid remote addr: %s\n", optarg);
+                    goto err;
+                }
+                strcpy(opt_bind_addr, optarg);
+		enable_opt(OPT_BIND_TCP);
+		break;
             case 's':
                 g_syn_maxcnt = strtoul(optarg, NULL, 10);
                 if (g_syn_maxcnt == 0) {
@@ -282,8 +317,9 @@ static void parse_opt(int argc, char *argv[]) {
         goto err;
     }
 
-    parse_addr(opt_listen_addr, true);
-    parse_addr(opt_remote_addr, false);
+    parse_addr(opt_listen_addr, 0);
+    parse_addr(opt_remote_addr, 1);
+    if (has_opt(OPT_BIND_TCP)) parse_addr(opt_bind_addr, 2);
     return;
 
 err:
@@ -342,6 +378,7 @@ int main(int argc, char *argv[]) {
 
     log_info("udp listen addr: %s#%hu", g_listen_ipstr, g_listen_port);
     log_info("tcp remote addr: %s#%hu", g_remote_ipstr, g_remote_port);
+    if has_opt(OPT_BIND_TCP) log_info("tcp  bind  addr: %s#%hu", g_bind_ipstr, g_bind_port);
     if (g_syn_maxcnt) log_info("enable TCP_SYNCNT:%hhu sockopt", g_syn_maxcnt);
     if (has_opt(OPT_IPV6_V6ONLY)) log_info("enable IPV6_V6ONLY sockopt");
     if (has_opt(OPT_REUSE_PORT)) log_info("enable SO_REUSEPORT sockopt");
@@ -388,6 +425,14 @@ static void udp_recvmsg_cb(evloop_t *evloop, evio_t *watcher __unused, int event
     int sockfd = create_socket(skaddr_family(&g_remote_skaddr), SOCK_STREAM);
     if (sockfd < 0)
         goto free_ctx;
+
+    if (has_opt(OPT_BIND_TCP)) {
+	    if (bind(sockfd, &g_bind_skaddr.sa, skaddr_len(&g_bind_skaddr)) < 0) {
+		    log_error("bind tcp address: %m");
+		    return 1;
+	    }
+    }
+
 
     if (connect(sockfd, &g_remote_skaddr.sa, skaddr_len(&g_remote_skaddr)) < 0 && errno != EINPROGRESS) {
         log_warning("connect to %s#%hu: %m", g_remote_ipstr, g_remote_port);
