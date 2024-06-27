@@ -134,7 +134,7 @@ enum {
     OPT_IPV6_V6ONLY = 1 << 0,
     OPT_REUSE_PORT  = 1 << 1,
     OPT_VERBOSE     = 1 << 2,
-    OPT_BIND_TCP    = 1 << 4,
+    OPT_BIND_TCP    = 1 << 3,
 };
 
 #define has_opt(opt) (g_options & (opt))
@@ -429,7 +429,7 @@ static void udp_recvmsg_cb(evloop_t *evloop, evio_t *watcher __unused, int event
     if (has_opt(OPT_BIND_TCP)) {
 	    if (bind(sockfd, &g_bind_skaddr.sa, skaddr_len(&g_bind_skaddr)) < 0) {
 		    log_error("bind tcp address: %m");
-		    return 1;
+		    goto close_sockfd;
 	    }
     }
 
