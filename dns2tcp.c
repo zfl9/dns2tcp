@@ -264,7 +264,7 @@ static void parse_opt(int argc, char *argv[]) {
                 break;
             case 'B':
                 if (strlen(optarg) + 1 > IP6STRLEN + PORTSTRLEN) {
-                    printf("invalid remote addr: %s\n", optarg);
+                    printf("invalid bind addr: %s\n", optarg);
                     goto err;
                 }
                 strcpy(opt_bind_addr, optarg);
@@ -378,7 +378,7 @@ int main(int argc, char *argv[]) {
 
     log_info("udp listen addr: %s#%hu", g_listen_ipstr, g_listen_port);
     log_info("tcp remote addr: %s#%hu", g_remote_ipstr, g_remote_port);
-    if has_opt(OPT_BIND_TCP) log_info("tcp  bind  addr: %s#%hu", g_bind_ipstr, g_bind_port);
+    if has_opt(OPT_BIND_TCP) log_info("tcp bind addr: %s#%hu", g_bind_ipstr, g_bind_port);
     if (g_syn_maxcnt) log_info("enable TCP_SYNCNT:%hhu sockopt", g_syn_maxcnt);
     if (has_opt(OPT_IPV6_V6ONLY)) log_info("enable IPV6_V6ONLY sockopt");
     if (has_opt(OPT_REUSE_PORT)) log_info("enable SO_REUSEPORT sockopt");
@@ -432,6 +432,7 @@ static void udp_recvmsg_cb(evloop_t *evloop, evio_t *watcher __unused, int event
             goto close_sockfd;
         }
     }
+
     if (connect(sockfd, &g_remote_skaddr.sa, skaddr_len(&g_remote_skaddr)) < 0 && errno != EINPROGRESS) {
         log_warning("connect to %s#%hu: %m", g_remote_ipstr, g_remote_port);
         goto close_sockfd;
