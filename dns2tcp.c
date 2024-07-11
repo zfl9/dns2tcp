@@ -9,7 +9,6 @@
 #include <errno.h>
 #include <signal.h>
 #include <unistd.h>
-#include <assert.h>
 #include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -17,7 +16,7 @@
 #include <netinet/tcp.h>
 #include "libev/ev.h"
 
-#define DNS2TCP_VER "dns2tcp v1.1.1"
+#define DNS2TCP_VER "dns2tcp v1.1.2"
 
 #ifndef IPV6_V6ONLY
   #define IPV6_V6ONLY 26
