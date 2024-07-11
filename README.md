@@ -24,7 +24,6 @@ dns2tcp 默认安装到 `/usr/local/bin/dns2tcp`，可安装到其它目录，�
 
 ```bash
 # sh/bash 可以不加引号，zsh 必须加引号，防止#被转义
-# 好吧，这里我偷了下懒，端口号是必须指定的，即使是 53
 # UPDATE: 从 v1.1.1 版本开始可以省略端口号，默认是 53
 dns2tcp -L "127.0.0.1#5353" -R "8.8.8.8#53"
 
@@ -49,19 +48,22 @@ iptables -t nat -A OUTPUT -p udp -d 8.8.8.8 --dport 53 -j REDIRECT --to-ports 53
 ## 全部参数
 
 ```console
-usage: dns2tcp <-L listen> <-R remote> [-s syncnt] [-6rvVh]
- -L <ip[#port]>          udp listen address, this is required
- -R <ip[#port]>          tcp remote address, this is required
- -s <syncnt>             set TCP_SYNCNT(max) for remote socket
- -6                      enable IPV6_V6ONLY for listen socket
- -r                      enable SO_REUSEPORT for listen socket
- -v                      print verbose log, default: <disabled>
+usage: dns2tcp <-L listen> <-R remote> [options...]
+ -L <ip[#port]>          udp listen address, port default to 53
+ -R <ip[#port]>          tcp remote address, port default to 53
+ -l <ip[#port]>          tcp local address, port default to 0
+ -s <syncnt>             set TCP_SYNCNT option for tcp socket
+ -6                      set IPV6_V6ONLY option for udp socket
+ -r                      set SO_REUSEPORT option for udp socket
+ -v                      print verbose log, used for debugging
  -V                      print version number of dns2tcp and exit
  -h                      print help information of dns2tcp and exit
 bug report: https://github.com/zfl9/dns2tcp. email: zfl9.com@gmail.com
 ```
 
-`-s`：对`TCP`套接字设置`TCP_SYNCNT`，其值将影响`TCP`连接超时时间。
+`-l`：设置`TCP`连接的本地地址（源地址），`0地址`或`0端口`表示由系统选择。
+
+`-s`：对`TCP`套接字设置`TCP_SYNCNT`，该选项值将影响`TCP`的连接超时时间。
 
 `-6`：对`UDP`套接字设置`IPV6_V6ONLY`，建议始终启用，把 v4 和 v6 监听严格区分开。
 
